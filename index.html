@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 西林瓶 - 前卫生化质感</title>
+    <style>
+        body {
+            margin: 0;
+            overflow-x: hidden;
+            background: radial-gradient(circle at center, #EFEFEF 0%, #D4D7D6 100%); /* 渐变摄影棚背景 */
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .hero-section {
+            max-width: 1380px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 100vh;
+            padding: 0 40px;
+            box-sizing: border-box;
+            position: relative;
+        }
+        .text-content {
+            flex: 1;
+            max-width: 45%; /* 给文字留出左侧空间 */
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            padding: 80px 0;
+            box-sizing: border-box;
+            pointer-events: none; /* 让文本不阻挡后方可能的交互 */
+        }
+        #canvas-container {
+            flex: 1;
+            height: 100vh;
+            width: 55%;
+            position: relative;
+            cursor: grab;
+        }
+        #canvas-container:active {
+            cursor: grabbing;
+        }
+        .header {
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            color: #1a1a1a;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .footer {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            color: #555;
+            font-size: 11px;
+            letter-spacing: 2px;
+        }
+        .spec {
+            line-height: 1.8;
+            color: #444;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 12px;
+            letter-spacing: 3px;
+            color: #333;
+            text-transform: uppercase;
+            transition: opacity 0.5s ease;
+            z-index: 20;
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 810px) { /* Tablet */
+            .hero-section {
+                flex-direction: column;
+                justify-content: center;
+                padding: 40px 20px;
+                height: auto;
+                min-height: 100vh;
+            }
+            .text-content {
+                max-width: 100%;
+                width: 100%;
+                height: auto;
+                padding: 20px 0;
+                order: 2; /* 文本排在模型下方 */
+                text-align: center;
+                gap: 40px;
+            }
+            .footer {
+                align-items: center;
+            }
+            #canvas-container {
+                width: 100%;
+                height: 500px;
+                order: 1; /* 模型排在上方 */
+            }
+        }
+
+        @media (max-width: 390px) { /* Mobile */
+            .hero-section {
+                padding: 20px 15px;
+            }
+            #canvas-container {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 引入自定义 SVG 滤镜，用于实现真实的定向动态模糊 (Motion Blur) -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="width:0;height:0;position:absolute;">
+        <defs>
+            <filter id="motion-blur" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur id="blur-filter" in="SourceGraphic" stdDeviation="0 0" />
+            </filter>
+        </defs>
+    </svg>
+
+    <div id="loading"></div>
+    <div class="hero-section">
+        <!-- 左侧留白区域 (后期会做文本内容) -->
+        <div class="text-content"></div>
+        <!-- 右侧3D模型交互区域 -->
+        <div id="canvas-container"></div>
+    </div>
+
+    <!-- 引入 GSAP 动画库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+
+    <!-- Import maps polyfill for older browsers -->
+    <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+        let camera, scene, renderer, controls;
+
+        init();
+        animate();
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // 1. 初始化渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            
+            // 色调映射与曝光，营造高级摄影质感
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            
+            // 启用阴影
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // 2. 场景设置
+            scene = new THREE.Scene();
+            
+            // 3. 相机设置 - 略带长焦感(35mm)，减少透视畸变，更显严谨和冷静
+            camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 100);
+            camera.position.set(0, 0, 8);
+
+            // 4. 环境光与反射 (使用高质感通透厂房 HDRI，避免了医院贴图中的米黄色光害，保留了丰富的窗户/结构反射)
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            pmremGenerator.compileEquirectangularShader();
+            
+            new RGBELoader()
+                .setDataType(THREE.FloatType)
+                .load('hospital_room_1k.hdr', function (texture) {
+                    // 黑科技：在内存中强行将 HDR 转换为黑白，消除米黄色光害
+                    const data = texture.image.data;
+                    for (let i = 0; i < data.length; i += 4) {
+                        const r = data[i];
+                        const g = data[i + 1];
+                        const b = data[i + 2];
+                        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                        data[i] = lum;
+                        data[i + 1] = lum;
+                        data[i + 2] = lum;
+                    }
+                    texture.needsUpdate = true;
+
+                    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+                    scene.environment = envMap;
+                    
+                    // 提升曝光度，确保金属足够明亮但不过曝
+                    renderer.toneMappingExposure = 1.35; 
+
+                    // 释放内存
+                    texture.dispose();
+                    pmremGenerator.dispose();
+                });
+            
+            // 优化摄影棚布光：为了追求极致纯粹的反射环境，移除了左上方主光源
+            // 仅保留半球光提供基础的环境漫反射，让模型完全依靠 HDRI 贴图本身的光影进行照明和反射
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0xd4d7d6, 0.8); // 调弱半球光，避免整体发灰
+            scene.add(hemiLight);
+
+            // 5. 交互控制器 (限制性交互)
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.04; // 增加阻尼顺滑度，提升高级感
+            
+            controls.enableZoom = false; // 禁止缩放
+            controls.enablePan = false; // 禁止平移
+            
+            // 限制垂直旋转角度，只能水平查看，保持优雅固定的姿态
+            // Math.PI / 2.05 代表正视略微俯视一点点
+            const fixedPolar = Math.PI / 2.05;
+            controls.minPolarAngle = fixedPolar;
+            controls.maxPolarAngle = fixedPolar;
+            
+            // 自动缓慢旋转
+            controls.autoRotate = true;
+            controls.autoRotateSpeed = -0.8; // 负值代表顺时针旋转
+
+            // 生成横向拉丝纹理（程序化生成，用作粗糙度和凹凸贴图，完美规避接缝色块又提供物理拉丝感）
+            // 增强：加入了更多的随机短横线和颗粒微小瑕疵，使其更有手工拉丝和真实金属的随机感
+            function generateBrushedTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 1024;
+                canvas.height = 1024;
+                const context = canvas.getContext('2d');
+                
+                // 基础中性灰
+                context.fillStyle = '#808080';
+                context.fillRect(0, 0, 1024, 1024);
+                
+                // 1. 绘制主体长横向金属丝划痕
+                for (let i = 0; i < 8000; i++) {
+                    const isLight = Math.random() > 0.5;
+                    const alpha = Math.random() * 0.12; // 稍微提升长丝的透明度对比
+                    context.fillStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
+                    
+                    const y = Math.random() * 1024;
+                    const x = Math.random() * 1024;
+                    const width = 200 + Math.random() * 800; // 横向细长
+                    const height = Math.random() * 1.5; // 极细的划痕高度
+                    
+                    context.fillRect(x, y, width, height);
+                }
+
+                // 2. 绘制短促的、随机的横向断丝（增强随机不平整感）
+                for (let i = 0; i < 15000; i++) {
+                    const isLight = Math.random() > 0.5;
+                    const alpha = Math.random() * 0.15; // 短丝对比度更强一点
+                    context.fillStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
+                    
+                    const y = Math.random() * 1024;
+                    const x = Math.random() * 1024;
+                    const width = 5 + Math.random() * 40; // 短促的横线
+                    const height = Math.random() * 2.0; 
+                    
+                    context.fillRect(x, y, width, height);
+                }
+
+                // 3. 绘制金属表面微小的随机颗粒瑕疵点 (noise)
+                for (let i = 0; i < 30000; i++) {
+                    const isLight = Math.random() > 0.5;
+                    const alpha = Math.random() * 0.18; // 颗粒点要有足够的深度/凸起感
+                    context.fillStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
+                    
+                    const y = Math.random() * 1024;
+                    const x = Math.random() * 1024;
+                    const size = Math.random() * 1.5; // 点状噪点
+                    
+                    context.fillRect(x, y, size, size);
+                }
+
+                // 4. 绘制少量的斜向/随机角度的较深物理划痕，增强破损和使用痕迹感
+                for (let i = 0; i < 400; i++) {
+                    const isLight = Math.random() > 0.5;
+                    const alpha = Math.random() * 0.3; // 划痕对比度更高
+                    context.strokeStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
+                    context.lineWidth = Math.random() * 2.0; // 划痕有粗细变化
+                    
+                    context.beginPath();
+                    const startX = Math.random() * 1024;
+                    const startY = Math.random() * 1024;
+                    context.moveTo(startX, startY);
+                    
+                    // 划痕长度和略微倾斜的角度
+                    const length = 10 + Math.random() * 150;
+                    const angle = (Math.random() - 0.5) * 0.6; // 在水平方向上下产生最高约17度的随机倾斜
+                    context.lineTo(startX + Math.cos(angle) * length, startY + Math.sin(angle) * length);
+                    context.stroke();
+                }
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(4, 2); // 增加UV重复采样，使丝线更密集细长
+                return texture;
+            }
+
+            // 生成玻璃微小瑕疵/噪点贴图 (用作玻璃表面的微弱物理凹凸，增加真实感)
+            function generateNoiseTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 512;
+                const context = canvas.getContext('2d');
+                
+                // 基础平滑中性灰
+                context.fillStyle = '#808080';
+                context.fillRect(0, 0, 512, 512);
+                
+                // 绘制随机噪点瑕疵
+                for (let i = 0; i < 40000; i++) {
+                    const isLight = Math.random() > 0.5;
+                    const alpha = Math.random() * 0.15; // 极微弱的噪点强度
+                    context.fillStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
+                    
+                    const y = Math.random() * 512;
+                    const x = Math.random() * 512;
+                    const size = Math.random() * 1.5; // 极小的瑕疵点
+                    
+                    context.fillRect(x, y, size, size);
+                }
+
+                // 添加玻璃表面的随机长划痕瑕疵（磨损感）
+                for (let i = 0; i < 300; i++) {
+                    const alpha = Math.random() * 0.25; // 划痕较噪点稍强
+                    context.strokeStyle = `rgba(255,255,255,${alpha})`; // 玻璃划痕通常是发白的微凹/反光
+                    context.lineWidth = 0.5 + Math.random() * 1.5; // 粗细不均的划痕
+                    
+                    context.beginPath();
+                    const startX = Math.random() * 512;
+                    const startY = Math.random() * 512;
+                    context.moveTo(startX, startY);
+                    
+                    // 玻璃划痕可以是任意角度的
+                    const length = 10 + Math.random() * 80;
+                    const angle = Math.random() * Math.PI * 2;
+                    context.lineTo(startX + Math.cos(angle) * length, startY + Math.sin(angle) * length);
+                    context.stroke();
+                }
+                
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(4, 4); // 密集采样，使其变成极小的高频噪点
+                return texture;
+            }
+
+            const brushedTex = generateBrushedTexture();
+            const noiseTex = generateNoiseTexture();
+
+            // 6. 材质定义
+            // 真实PBR：拉丝质感银色金属盖 (引入增强的随机横向拉丝与颗粒瑕疵贴图)
+            const brushedMetal = new THREE.MeshPhysicalMaterial({
+                color: 0xeaf2fc, // 冰蓝色冷底色，彻底抵消任何环境暖光，确保呈现纯银/冷酷的生化感
+                metalness: 1.0, // 纯金属
+                roughness: 0.65, // 大幅提升基础粗糙度，产生高级的 blur 磨砂感
+                roughnessMap: brushedTex, // 划痕处会有不同的粗糙度反光
+                bumpMap: brushedTex, // 物理凹凸，让高光在横向纹理和噪点上产生真实的破碎感
+                bumpScale: 0.008, // 大幅加深凹凸值，让金属表面的颗粒噪点和破损划痕更加粗糙显眼
+                envMapIntensity: 2.0, // 调整反射强度，配合粗糙表面
+                clearcoat: 0.2, // 增加微弱的表面磨砂清漆
+                clearcoatRoughness: 0.5 // 清漆层非常粗糙，强化反光点被打散和 blur 的视觉效果
+            });
+
+            // 高透厚玻璃，边缘折射感更强 (加入微量物理噪点瑕疵和划痕)
+            const clearGlass = new THREE.MeshPhysicalMaterial({
+                color: 0xeaf2fc, // 极微弱的冰蓝冷底色，保持医用玻璃的冷峻通透
+                metalness: 0.05,
+                roughness: 0.18, // 提升粗糙度，产生微弱的磨砂 blur 效果
+                roughnessMap: noiseTex, // 增加粗糙度贴图，让模糊效果不均匀（更真实）
+                bumpMap: noiseTex, // 物理噪点贴图
+                bumpScale: 0.003, // 提升瑕疵强度，增加凹凸噪点感
+                transmission: 1.0, // 完美透光
+                ior: 1.52, // 玻璃折射率
+                thickness: 2.5, // 增强厚度感，让折射边缘更加明显
+                attenuationColor: 0xffffff,
+                attenuationDistance: 10,
+                transparent: true,
+                opacity: 1.0,
+                clearcoat: 0.5, // 降低一点表面高光清漆强度，配合粗糙表面
+                clearcoatRoughness: 0.2, // 给清漆也增加一点粗糙度
+                envMapIntensity: 2.0
+            });
+
+            // 橡胶塞
+            const rubber = new THREE.MeshStandardMaterial({
+                color: 0x666666, // 参考图中隐约可见灰色
+                roughness: 0.7,
+                metalness: 0.1
+            });
+
+            // 生化粉末质感 (实质的白色颗粒粉末)
+            const whitePowder = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                roughness: 1.0, // 极度粗糙无反光
+                metalness: 0.0,
+                bumpMap: noiseTex, // 复用玻璃的微小瑕疵贴图来制造粉末表面的细微结块/凹凸颗粒感
+                bumpScale: 0.05, // 放大凹凸值，形成清晰的物理粉末颗粒表面
+                emissive: 0xffffff,
+                emissiveIntensity: 0.15, // 加入微弱的自发光，这是让它在极度磨砂玻璃和阴影中“跳出来”变成实质白色的核心黑科技
+                envMapIntensity: 0.2 // 粉末几乎不反射环境
+            });
+
+            // 7. 加载模型
+            const loader = new GLTFLoader();
+            loader.load('bottle.glb', function (gltf) {
+                const model = gltf.scene;
+                
+                // 居中和缩放模型以完美适配视图
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                const size = box.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                const scale = 3.2 / maxDim; // 调整最佳视觉缩放比例
+                
+                model.scale.setScalar(scale);
+                
+                // 目标默认位置
+                const targetX = -center.x * scale;
+                const targetY = -center.y * scale;
+                const targetZ = -center.z * scale;
+                
+                // 设置入场动画的初始状态 (左侧、略远、向内倾斜旋转)
+                // y轴正值到0是减小，在Three.js中代表顺时针旋转
+                model.position.set(targetX - 1.5, targetY + 0.2, targetZ - 6);
+                model.rotation.set(-0.15, Math.PI * 0.7, -0.15);
+
+                // 遍历并精确替换材质
+                model.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+
+                        const name = child.name;
+                        
+                        // 精确匹配网格名称
+                        if (name.includes('jingshugaizi')) {
+                            // 金属盖子 -> 哑光拉丝银
+                            child.material = brushedMetal;
+                        } else if (name.includes('pingsheng1')) {
+                            // 瓶身 -> 高透厚玻璃
+                            child.material = clearGlass;
+                        } else if (name.includes('xiangjiaosai')) {
+                            // 橡胶塞 -> 橡胶质感
+                            child.material = rubber;
+                        } else if (name.includes('polySurface2')) {
+                            // 内部结构 -> 白色粉末
+                            child.material = whitePowder;
+                        } else if (name.includes('biaoqian')) {
+                            // 标签 -> 金属纸带横向拉丝质感
+                            if (child.material) {
+                                // 升级为物理材质并引入横向拉丝纹理
+                                const newMat = new THREE.MeshPhysicalMaterial({
+                                    map: child.material.map, // 保留原有的贴图（Logo等）
+                                    color: 0xffffff,
+                                    metalness: 1.0, // 纯金属质感
+                                    roughness: 0.45,
+                                    roughnessMap: brushedTex, // 细微的横向粗糙度分布
+                                    bumpMap: brushedTex, // 打碎反光，产生更真实的随机拉丝高光和噪点
+                                    bumpScale: 0.002, // 稍微加大标签的拉丝凹凸强度，凸显随机金属颗粒感
+                                    clearcoat: 0.1, // 微量保护清漆
+                                    clearcoatRoughness: 0.3,
+                                    envMapIntensity: 1.8 // 增强反射
+                                });
+                                child.material = newMat;
+                            }
+                        }
+                    }
+                });
+
+                // 添加一个底部极简阴影捕捉平面，增强落地感和质感
+                const planeGeometry = new THREE.PlaneGeometry(20, 20);
+                const shadowMaterial = new THREE.ShadowMaterial({ opacity: 0.05 });
+                const shadowPlane = new THREE.Mesh(planeGeometry, shadowMaterial);
+                shadowPlane.rotation.x = -Math.PI / 2;
+                // 将平面置于模型最底部
+                shadowPlane.position.y = (-center.y * scale) - (size.y * scale / 2);
+                shadowPlane.receiveShadow = true;
+                scene.add(shadowPlane);
+
+                scene.add(model);
+                
+                // 入场动画：单次连续的平滑弧线 (从左到中间，不中断)
+                const tl = gsap.timeline();
+                
+                // 黑科技：配置 SVG 动态模糊滤镜代理对象
+                const blurFilter = document.getElementById('blur-filter');
+                renderer.domElement.style.filter = 'url(#motion-blur)';
+                const blurParams = { x: 15, y: 3 }; // 初始水平方向模糊较大，垂直方向略小
+                
+                // 模糊强度衰减动画
+                tl.to(blurParams, {
+                    x: 0,
+                    y: 0,
+                    duration: 1.5,
+                    ease: "power3.out",
+                    onUpdate: () => {
+                        blurFilter.setAttribute('stdDeviation', `${blurParams.x} ${blurParams.y}`);
+                    },
+                    onComplete: () => {
+                        // 动画结束移除滤镜，恢复极致清晰度
+                        renderer.domElement.style.filter = 'none';
+                    }
+                }, 0);
+
+                // 为了防止模型在狭窄的右侧容器中被 clip (裁切)，我们将 X 轴的移动速度调得比 Z 轴更快
+                // 这使得模型在远离镜头 (视野较宽) 时迅速滑向中心，然后在靠近中心时再缓慢拉近 (视野变窄)，形成一条完美的防裁切 C 型弧线
+                tl.to(model.position, {
+                    x: targetX,
+                    duration: 2.2,
+                    ease: "power4.out" // 横向快速归中，避免超出容器左侧边界
+                }, 0)
+                .to(model.position, {
+                    z: targetZ,
+                    y: targetY,
+                    duration: 2.2,
+                    ease: "power2.out" // 深度缓慢拉近，确保横向已经归中时才放大
+                }, 0)
+                // 优雅的回旋归正
+                .to(model.rotation, {
+                    x: 0,
+                    y: 0,
+                    z: 0,
+                    duration: 2.5,
+                    ease: "power3.out"
+                }, 0);
+                
+                // 隐藏加载UI
+                const loading = document.getElementById('loading');
+                if (loading) {
+                    loading.style.opacity = '0';
+                    setTimeout(() => loading.style.display = 'none', 500);
+                }
+
+            }, undefined, function (error) {
+                console.error(error);
+                const loading = document.getElementById('loading');
+                if (loading) loading.innerText = ''; // 去除错误时的文字提示
+            });
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            // 控制器更新，包括阻尼和平滑自动旋转
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
