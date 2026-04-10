@@ -8,62 +8,33 @@
         body {
             margin: 0;
             overflow-x: hidden;
-            background: radial-gradient(circle at center, #EFEFEF 0%, #D4D7D6 100%); /* 渐变摄影棚背景 */
+            background: #000000; /* 纯黑背景 (Dark Mode) */
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             user-select: none;
             -webkit-user-select: none;
         }
         .hero-section {
-            max-width: 1380px;
-            margin: 0 auto;
+            width: 100%;
+            max-width: none;
+            margin: 0;
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: center;
+            min-height: 100vh;
             height: 100vh;
-            padding: 0 40px;
+            padding: 0;
             box-sizing: border-box;
             position: relative;
         }
-        .text-content {
-            flex: 1;
-            max-width: 45%; /* 给文字留出左侧空间 */
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 100%;
-            padding: 80px 0;
-            box-sizing: border-box;
-            pointer-events: none; /* 让文本不阻挡后方可能的交互 */
-        }
         #canvas-container {
-            flex: 1;
-            height: 100vh;
-            width: 55%;
+            width: 100%;
+            height: 100%;
+            max-width: 100%;
             position: relative;
             cursor: grab;
         }
         #canvas-container:active {
             cursor: grabbing;
-        }
-        .header {
-            text-transform: uppercase;
-            letter-spacing: 4px;
-            color: #1a1a1a;
-            font-size: 13px;
-            font-weight: 600;
-        }
-        .footer {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            color: #555;
-            font-size: 11px;
-            letter-spacing: 2px;
-        }
-        .spec {
-            line-height: 1.8;
-            color: #444;
         }
         #loading {
             position: absolute;
@@ -72,46 +43,17 @@
             transform: translate(-50%, -50%);
             font-size: 12px;
             letter-spacing: 3px;
-            color: #333;
+            color: #ffffff; /* Dark Mode 下改为纯白 */
             text-transform: uppercase;
             transition: opacity 0.5s ease;
             z-index: 20;
         }
 
-        /* 响应式适配 */
-        @media (max-width: 810px) { /* Tablet */
+        /* 响应式：小屏仍占满视口 */
+        @media (max-width: 810px) {
             .hero-section {
-                flex-direction: column;
-                justify-content: center;
-                padding: 40px 20px;
-                height: auto;
-                min-height: 100vh;
-            }
-            .text-content {
-                max-width: 100%;
-                width: 100%;
-                height: auto;
-                padding: 20px 0;
-                order: 2; /* 文本排在模型下方 */
-                text-align: center;
-                gap: 40px;
-            }
-            .footer {
-                align-items: center;
-            }
-            #canvas-container {
-                width: 100%;
-                height: 500px;
-                order: 1; /* 模型排在上方 */
-            }
-        }
-
-        @media (max-width: 390px) { /* Mobile */
-            .hero-section {
-                padding: 20px 15px;
-            }
-            #canvas-container {
-                height: 400px;
+                min-height: 100dvh;
+                height: 100dvh;
             }
         }
     </style>
@@ -128,14 +70,14 @@
 
     <div id="loading"></div>
     <div class="hero-section">
-        <!-- 左侧留白区域 (后期会做文本内容) -->
-        <div class="text-content"></div>
-        <!-- 右侧3D模型交互区域 -->
         <div id="canvas-container"></div>
     </div>
 
     <!-- 引入 GSAP 动画库 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    
+    <!-- 引入 lil-gui 用于控制参数 -->
+    <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.umd.min.js"></script>
 
     <!-- Import maps polyfill for older browsers -->
     <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
@@ -143,8 +85,8 @@
     <script type="importmap">
         {
             "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+                "three": "https://unpkg.com/three@0.164.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.164.0/examples/jsm/"
             }
         }
     </script>
@@ -184,13 +126,20 @@
             camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 100);
             camera.position.set(0, 0, 8);
 
-            // 4. 环境光与反射 (使用高质感通透厂房 HDRI，避免了医院贴图中的米黄色光害，保留了丰富的窗户/结构反射)
+            // 4. 环境光与反射 (切换为暗调偏柔和的摄影棚 HDRI)
             const pmremGenerator = new THREE.PMREMGenerator(renderer);
             pmremGenerator.compileEquirectangularShader();
             
+            // 环境光配置 (需要提前定义以便加载器访问)
+            const envSettings = {
+                rotationY: 0,
+                enableHDRI: true
+            };
+
+            let envMapTexture = null;
             new RGBELoader()
                 .setDataType(THREE.FloatType)
-                .load('hospital_room_1k.hdr', function (texture) {
+                .load('parking_garage_1k.hdr', function (texture) {
                     // 黑科技：在内存中强行将 HDR 转换为黑白，消除米黄色光害
                     const data = texture.image.data;
                     for (let i = 0; i < data.length; i += 4) {
@@ -204,10 +153,12 @@
                     }
                     texture.needsUpdate = true;
 
-                    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
-                    scene.environment = envMap;
+                    envMapTexture = pmremGenerator.fromEquirectangular(texture).texture;
+                    if (envSettings.enableHDRI) {
+                        scene.environment = envMapTexture;
+                    }
                     
-                    // 提升曝光度，确保金属足够明亮但不过曝
+                    // 适当提升曝光度，确保在暗调环境下能清晰看清标签上的文字，同时保持整体深邃感
                     renderer.toneMappingExposure = 1.35; 
 
                     // 释放内存
@@ -215,10 +166,19 @@
                     pmremGenerator.dispose();
                 });
             
-            // 优化摄影棚布光：为了追求极致纯粹的反射环境，移除了左上方主光源
-            // 仅保留半球光提供基础的环境漫反射，让模型完全依靠 HDRI 贴图本身的光影进行照明和反射
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0xd4d7d6, 0.8); // 调弱半球光，避免整体发灰
+            // 优化摄影棚布光：大幅提亮环境补光，解决阴影区死黑的问题
+            // 天光保持纯白，地面反光颜色从极暗的 0x111111 提亮到中灰色 0x666666，强度提升到 1.5，让暗部细节透出来
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x666666, 1.5); 
             scene.add(hemiLight);
+
+            // 添加一盏微弱的正面主光源，专门用来照亮正面标签上的文字
+            const frontLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            frontLight.position.set(0, 0, 5); // 从正前方打光
+            scene.add(frontLight);
+
+            // 再额外增加一个微弱的全局环境光，作为最终托底，确保无论怎么转都不会有纯黑的死角
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
 
             // 5. 交互控制器 (限制性交互)
             controls = new OrbitControls(camera, renderer.domElement);
@@ -237,6 +197,45 @@
             // 自动缓慢旋转
             controls.autoRotate = true;
             controls.autoRotateSpeed = -0.8; // 负值代表顺时针旋转
+
+            // ==========================================
+            // 调试面板 (lil-gui) - 用于手动调整光照和环境
+            // ==========================================
+            const gui = new lil.GUI({ title: '光照与环境控制' });
+            
+            // 全局曝光
+            gui.add(renderer, 'toneMappingExposure', 0, 3).name('全局曝光度 (Exposure)');
+
+            // 环境光旋转 (HDRI)
+            const envFolder = gui.addFolder('HDRI 环境光 (Environment)');
+            envFolder.add(envSettings, 'enableHDRI').name('开启 HDRI').onChange((val) => {
+                if (val && envMapTexture) {
+                    scene.environment = envMapTexture;
+                } else {
+                    scene.environment = null;
+                }
+            });
+            envFolder.add(envSettings, 'rotationY', -Math.PI, Math.PI).name('HDRI 水平旋转').onChange((val) => {
+                scene.environmentRotation.y = val;
+            });
+
+            // 底部补光 (HemisphereLight)
+            const hemiFolder = gui.addFolder('底部补光 (HemiLight)');
+            hemiFolder.add(hemiLight, 'visible').name('开启/关闭');
+            hemiFolder.add(hemiLight, 'intensity', 0, 5).name('强度');
+            
+            // 正面高光 (DirectionalLight)
+            const dirFolder = gui.addFolder('正面主光 (FrontLight)');
+            dirFolder.add(frontLight, 'visible').name('开启/关闭');
+            dirFolder.add(frontLight, 'intensity', 0, 5).name('强度');
+            dirFolder.add(frontLight.position, 'x', -10, 10).name('位置 X');
+            dirFolder.add(frontLight.position, 'y', -10, 10).name('位置 Y');
+            dirFolder.add(frontLight.position, 'z', -10, 10).name('位置 Z');
+            
+            // 全局基础托底光 (AmbientLight)
+            const ambFolder = gui.addFolder('全局兜底光 (AmbientLight)');
+            ambFolder.add(ambientLight, 'visible').name('开启/关闭');
+            ambFolder.add(ambientLight, 'intensity', 0, 2).name('强度');
 
             // 生成横向拉丝纹理（程序化生成，用作粗糙度和凹凸贴图，完美规避接缝色块又提供物理拉丝感）
             // 增强：加入了更多的随机短横线和颗粒微小瑕疵，使其更有手工拉丝和真实金属的随机感
@@ -383,24 +382,27 @@
                 clearcoatRoughness: 0.5 // 清漆层非常粗糙，强化反光点被打散和 blur 的视觉效果
             });
 
-            // 高透厚玻璃，边缘折射感更强 (加入微量物理噪点瑕疵和划痕)
+            // 高透玻璃：恢复真实的玻璃强反射与超低粗糙度，让其看起来像清透的真玻璃
             const clearGlass = new THREE.MeshPhysicalMaterial({
-                color: 0xeaf2fc, // 极微弱的冰蓝冷底色，保持医用玻璃的冷峻通透
-                metalness: 0.05,
-                roughness: 0.18, // 提升粗糙度，产生微弱的磨砂 blur 效果
-                roughnessMap: noiseTex, // 增加粗糙度贴图，让模糊效果不均匀（更真实）
-                bumpMap: noiseTex, // 物理噪点贴图
-                bumpScale: 0.003, // 提升瑕疵强度，增加凹凸噪点感
-                transmission: 1.0, // 完美透光
-                ior: 1.52, // 玻璃折射率
-                thickness: 2.5, // 增强厚度感，让折射边缘更加明显
+                color: 0xffffff,
+                metalness: 0.0,
+                roughness: 0.0, // 极致平滑，避免表面粗糙带来的雾面发白
+                roughnessMap: noiseTex,
+                roughnessMapIntensity: 0.05, // 仅保留极微弱的随机瑕疵，不影响整体通透
+                bumpMap: noiseTex,
+                bumpScale: 0.0005, // 极弱凹凸
+                transmission: 1.0, // 100% 物理透光
+                ior: 1.52, // 真实的玻璃折射率
+                thickness: 0.5, // 更薄的玻璃壁，减轻折射导致的叠层白雾
                 attenuationColor: 0xffffff,
-                attenuationDistance: 10,
+                attenuationDistance: Infinity,
                 transparent: true,
                 opacity: 1.0,
-                clearcoat: 0.5, // 降低一点表面高光清漆强度，配合粗糙表面
-                clearcoatRoughness: 0.2, // 给清漆也增加一点粗糙度
-                envMapIntensity: 2.0
+                clearcoat: 0.1, // 增加微弱清漆，提升表面水润感
+                clearcoatRoughness: 0.0,
+                specularIntensity: 1.0, // 恢复 100% 菲涅尔镜面反射，边缘才会有锐利高光
+                specularColor: 0xffffff,
+                envMapIntensity: 2.0 // 大幅提升环境反射！高级玻璃的透明质感完全依靠锐利且强烈的倒影来支撑
             });
 
             // 橡胶塞
@@ -422,9 +424,38 @@
                 envMapIntensity: 0.2 // 粉末几乎不反射环境
             });
 
+            // ==========================================
+            // 材质控制 (Material Controls)
+            // ==========================================
+            const matFolder = gui.addFolder('材质属性控制 (Materials)');
+            
+            const glassFolder = matFolder.addFolder('高透玻璃 (Glass)');
+            glassFolder.add(clearGlass, 'roughness', 0, 1).name('粗糙度 (Roughness)');
+            glassFolder.add(clearGlass, 'bumpScale', 0, 0.02).name('凹凸强度 (Bump)');
+            glassFolder.add(clearGlass, 'ior', 1.0, 2.3).name('折射率 (IOR)');
+            glassFolder.add(clearGlass, 'thickness', 0, 5).name('体积厚度 (Thickness)');
+            glassFolder.add(clearGlass, 'specularIntensity', 0, 2).name('镜面高光强度');
+            glassFolder.add(clearGlass, 'envMapIntensity', 0, 5).name('环境反射强度');
+            glassFolder.add(clearGlass, 'clearcoat', 0, 1).name('表层清漆 (Clearcoat)');
+            glassFolder.close(); // 默认折叠，避免占太多屏幕
+
+            const metalFolder = matFolder.addFolder('拉丝金属盖 (Metal)');
+            metalFolder.add(brushedMetal, 'roughness', 0, 1).name('粗糙度 (Roughness)');
+            metalFolder.add(brushedMetal, 'bumpScale', 0, 0.05).name('凹凸强度 (Bump)');
+            metalFolder.add(brushedMetal, 'envMapIntensity', 0, 5).name('环境反射强度');
+            metalFolder.add(brushedMetal, 'clearcoat', 0, 1).name('表层清漆');
+            metalFolder.add(brushedMetal, 'clearcoatRoughness', 0, 1).name('清漆粗糙度');
+            metalFolder.close();
+
+            const powderFolder = matFolder.addFolder('生化粉末 (Powder)');
+            powderFolder.add(whitePowder, 'roughness', 0, 1).name('粗糙度');
+            powderFolder.add(whitePowder, 'bumpScale', 0, 0.2).name('凹凸强度 (结块感)');
+            powderFolder.add(whitePowder, 'emissiveIntensity', 0, 1).name('微发光强度 (提白)');
+            powderFolder.close();
+
             // 7. 加载模型
             const loader = new GLTFLoader();
-            loader.load('bottle.glb', function (gltf) {
+            loader.load('xilingping999.glb', function (gltf) {
                 const model = gltf.scene;
                 
                 // 居中和缩放模型以完美适配视图
