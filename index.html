@@ -112,7 +112,7 @@
             
             // 色调映射与曝光，营造高级摄影质感
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 1.1;
+            renderer.toneMappingExposure = 2.0;
             
             // 启用阴影
             renderer.shadowMap.enabled = true;
@@ -121,6 +121,7 @@
 
             // 2. 场景设置
             scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000); // 【关键修复】为场景指定纯黑物理背景，解决开启 alpha 时 Transmission 材质通道混合导致发白发雾的 WebGL 渲染 Bug
             
             // 3. 相机设置 - 略带长焦感(35mm)，减少透视畸变，更显严谨和冷静
             camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 100);
@@ -132,6 +133,7 @@
             
             // 环境光配置 (需要提前定义以便加载器访问)
             const envSettings = {
+                rotationX: 0,
                 rotationY: 0,
                 enableHDRI: true
             };
@@ -159,7 +161,7 @@
                     }
                     
                     // 适当提升曝光度，确保在暗调环境下能清晰看清标签上的文字，同时保持整体深邃感
-                    renderer.toneMappingExposure = 1.35; 
+                    renderer.toneMappingExposure = 2.0; 
 
                     // 释放内存
                     texture.dispose();
@@ -217,6 +219,9 @@
             });
             envFolder.add(envSettings, 'rotationY', -Math.PI, Math.PI).name('HDRI 水平旋转').onChange((val) => {
                 scene.environmentRotation.y = val;
+            });
+            envFolder.add(envSettings, 'rotationX', -Math.PI, Math.PI).name('HDRI 上下旋转').onChange((val) => {
+                scene.environmentRotation.x = val;
             });
 
             // 底部补光 (HemisphereLight)
@@ -382,27 +387,24 @@
                 clearcoatRoughness: 0.5 // 清漆层非常粗糙，强化反光点被打散和 blur 的视觉效果
             });
 
-            // 高透玻璃：恢复真实的玻璃强反射与超低粗糙度，让其看起来像清透的真玻璃
+            // 高透纯净玻璃：彻底重构 PBR 参数，解决所有泛白和雾面问题
             const clearGlass = new THREE.MeshPhysicalMaterial({
-                color: 0xffffff,
-                metalness: 0.0,
-                roughness: 0.0, // 极致平滑，避免表面粗糙带来的雾面发白
-                roughnessMap: noiseTex,
-                roughnessMapIntensity: 0.05, // 仅保留极微弱的随机瑕疵，不影响整体通透
-                bumpMap: noiseTex,
-                bumpScale: 0.0005, // 极弱凹凸
-                transmission: 1.0, // 100% 物理透光
-                ior: 1.52, // 真实的玻璃折射率
-                thickness: 0.5, // 更薄的玻璃壁，减轻折射导致的叠层白雾
-                attenuationColor: 0xffffff,
-                attenuationDistance: Infinity,
+                color: 0xffffff, // 纯白透射
+                metalness: 0.863, // 按截图设置
+                roughness: 0.059, // 按截图设置
+                transmission: 1.0, // 按截图设置
+                ior: 1.703, // 按截图设置
+                thickness: 0.483, // 按截图设置
                 transparent: true,
-                opacity: 1.0,
-                clearcoat: 0.1, // 增加微弱清漆，提升表面水润感
-                clearcoatRoughness: 0.0,
-                specularIntensity: 1.0, // 恢复 100% 菲涅尔镜面反射，边缘才会有锐利高光
-                specularColor: 0xffffff,
-                envMapIntensity: 2.0 // 大幅提升环境反射！高级玻璃的透明质感完全依靠锐利且强烈的倒影来支撑
+                opacity: 0.406, // 按截图设置
+                depthWrite: true, // 按截图设置开启
+                depthTest: true, // 按截图设置开启
+                side: THREE.BackSide, // 按截图设置
+                envMapIntensity: 1.42, // 按截图设置
+                clearcoat: 0.225, // 按截图设置
+                clearcoatRoughness: 0.311, // 按截图设置
+                specularIntensity: 0.92, // 按截图设置
+                bumpScale: 0.0046 // 按截图设置
             });
 
             // 橡胶塞
@@ -418,25 +420,50 @@
                 roughness: 1.0, // 极度粗糙无反光
                 metalness: 0.0,
                 bumpMap: noiseTex, // 复用玻璃的微小瑕疵贴图来制造粉末表面的细微结块/凹凸颗粒感
-                bumpScale: 0.05, // 放大凹凸值，形成清晰的物理粉末颗粒表面
+                bumpScale: 0.2, // 放大凹凸值，形成清晰的物理粉末颗粒表面
                 emissive: 0xffffff,
-                emissiveIntensity: 0.15, // 加入微弱的自发光，这是让它在极度磨砂玻璃和阴影中“跳出来”变成实质白色的核心黑科技
+                emissiveIntensity: 1.0, // 加入强烈的自发光，突破有色玻璃的染色过滤
                 envMapIntensity: 0.2 // 粉末几乎不反射环境
             });
 
             // ==========================================
             // 材质控制 (Material Controls)
             // ==========================================
+            
+            // 提前声明部件数组，供 UI 控制器在回调中访问
+            let modelParts = {
+                cap: [],
+                glass: [],
+                rubber: [],
+                powder: [],
+                label: []
+            };
+
             const matFolder = gui.addFolder('材质属性控制 (Materials)');
             
             const glassFolder = matFolder.addFolder('高透玻璃 (Glass)');
-            glassFolder.add(clearGlass, 'roughness', 0, 1).name('粗糙度 (Roughness)');
-            glassFolder.add(clearGlass, 'bumpScale', 0, 0.02).name('凹凸强度 (Bump)');
-            glassFolder.add(clearGlass, 'ior', 1.0, 2.3).name('折射率 (IOR)');
-            glassFolder.add(clearGlass, 'thickness', 0, 5).name('体积厚度 (Thickness)');
-            glassFolder.add(clearGlass, 'specularIntensity', 0, 2).name('镜面高光强度');
-            glassFolder.add(clearGlass, 'envMapIntensity', 0, 5).name('环境反射强度');
-            glassFolder.add(clearGlass, 'clearcoat', 0, 1).name('表层清漆 (Clearcoat)');
+            glassFolder.add(clearGlass, 'transparent').name('开启透明 (Transparent)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.transparent = val) });
+            glassFolder.add(clearGlass, 'transmission', 0, 1).name('物理透射度 (Transmission)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.transmission = val) });
+            glassFolder.add(clearGlass, 'opacity', 0, 1).name('不透明度 (Opacity)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.opacity = val) });
+            glassFolder.add(clearGlass, 'roughness', 0, 1).name('粗糙度 (Roughness)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.roughness = val) });
+            glassFolder.add(clearGlass, 'metalness', 0, 1).name('金属度 (Metalness)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.metalness = val) });
+            glassFolder.add(clearGlass, 'ior', 1.0, 2.3).name('折射率 (IOR)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.ior = val) });
+            glassFolder.add(clearGlass, 'thickness', 0, 1).name('折射厚度 (Thickness)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.thickness = val) });
+            glassFolder.add(clearGlass, 'envMapIntensity', 0, 5).name('环境反射强度').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.envMapIntensity = val) });
+            glassFolder.add(clearGlass, 'specularIntensity', 0, 2).name('镜面高光强度').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.specularIntensity = val) });
+            glassFolder.add(clearGlass, 'clearcoat', 0, 1).name('表层清漆 (Clearcoat)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.clearcoat = val) });
+            glassFolder.add(clearGlass, 'clearcoatRoughness', 0, 1).name('清漆粗糙度').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.clearcoatRoughness = val) });
+            glassFolder.add(clearGlass, 'bumpScale', 0, 0.02).name('凹凸强度 (Bump)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.bumpScale = val) });
+            glassFolder.add(clearGlass, 'depthWrite').name('深度写入 (DepthWrite)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.depthWrite = val) });
+            glassFolder.add(clearGlass, 'depthTest').name('深度测试 (DepthTest)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.depthTest = val) });
+            glassFolder.add(clearGlass, 'side', { 'FrontSide (单面外壁)': THREE.FrontSide, 'BackSide (单面内壁)': THREE.BackSide, 'DoubleSide (双面内外)': THREE.DoubleSide }).name('渲染计算面 (Side)').onChange(val => { if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.side = val) });
+            
+            // 颜色属性需要单独处理
+            const glassColorObj = { color: clearGlass.color.getHex() };
+            glassFolder.addColor(glassColorObj, 'color').name('玻璃底色 (Color)').onChange(val => {
+                clearGlass.color.setHex(val); // 保持基础对象更新
+                if(modelParts && modelParts.glass) modelParts.glass.forEach(mesh => mesh.material.color.setHex(val)); // 同步更新克隆后的材质
+            });
             glassFolder.close(); // 默认折叠，避免占太多屏幕
 
             const metalFolder = matFolder.addFolder('拉丝金属盖 (Metal)');
@@ -448,9 +475,13 @@
             metalFolder.close();
 
             const powderFolder = matFolder.addFolder('生化粉末 (Powder)');
-            powderFolder.add(whitePowder, 'roughness', 0, 1).name('粗糙度');
-            powderFolder.add(whitePowder, 'bumpScale', 0, 0.2).name('凹凸强度 (结块感)');
-            powderFolder.add(whitePowder, 'emissiveIntensity', 0, 1).name('微发光强度 (提白)');
+            powderFolder.add(whitePowder, 'roughness', 0, 1).name('粗糙度').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.roughness = val) });
+            powderFolder.add(whitePowder, 'bumpScale', 0, 0.2).name('凹凸强度 (结块感)').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.bumpScale = val) });
+            powderFolder.add(whitePowder, 'emissiveIntensity', 0, 1).name('微发光强度 (提白)').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.emissiveIntensity = val) });
+            
+            const powderColorObj = { color: whitePowder.color.getHex(), emissive: whitePowder.emissive.getHex() };
+            powderFolder.addColor(powderColorObj, 'color').name('粉末底色').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.color.setHex(val)) });
+            powderFolder.addColor(powderColorObj, 'emissive').name('自发光颜色').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.emissive.setHex(val)) });
             powderFolder.close();
 
             // 7. 加载模型
@@ -477,28 +508,35 @@
                 model.position.set(targetX - 1.5, targetY + 0.2, targetZ - 6);
                 model.rotation.set(-0.15, Math.PI * 0.7, -0.15);
 
-                // 遍历并精确替换材质
-                model.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                        child.receiveShadow = true;
+            // 遍历并精确替换材质
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
 
-                        const name = child.name;
-                        
-                        // 精确匹配网格名称
-                        if (name.includes('jingshugaizi')) {
-                            // 金属盖子 -> 哑光拉丝银
-                            child.material = brushedMetal;
-                        } else if (name.includes('pingsheng1')) {
-                            // 瓶身 -> 高透厚玻璃
-                            child.material = clearGlass;
-                        } else if (name.includes('xiangjiaosai')) {
-                            // 橡胶塞 -> 橡胶质感
-                            child.material = rubber;
-                        } else if (name.includes('polySurface2')) {
-                            // 内部结构 -> 白色粉末
-                            child.material = whitePowder;
-                        } else if (name.includes('biaoqian')) {
+                    const name = child.name;
+                    
+                    // 精确匹配网格名称
+                    if (name.includes('jingshugaizi')) {
+                        // 金属盖子 -> 哑光拉丝银
+                        child.material = brushedMetal;
+                        modelParts.cap.push(child);
+                    } else if (name.includes('pingsheng1')) {
+                        // 瓶身 -> 高透厚玻璃
+                        // 【修复关键点】：克隆玻璃材质，断开不同部件之间材质共享的引用绑定，这样调整瓶身颜色就不会污染其他原本可能默认共享同一材质的部件
+                        child.material = clearGlass.clone();
+                        // 如果克隆后需要在 UI 里动态更新，我们需要确保 UI 控制的是这个网格身上的材质
+                        modelParts.glass.push(child);
+                    } else if (name.includes('xiangjiaosai')) {
+                        // 橡胶塞 -> 橡胶质感
+                        child.material = rubber;
+                        modelParts.rubber.push(child);
+                    } else if (name.includes('polySurface2')) {
+                        // 内部结构 -> 白色粉末
+                        // 【修复关键点】：克隆白粉材质，避免与玻璃可能共享同一个默认材质（比如都是从glb导出的默认白色），从而解决一调玻璃粉末也跟着变颜色的问题
+                        child.material = whitePowder.clone();
+                        modelParts.powder.push(child);
+                    } else if (name.includes('biaoqian')) {
                             // 标签 -> 金属纸带横向拉丝质感
                             if (child.material) {
                                 // 升级为物理材质并引入横向拉丝纹理
@@ -516,8 +554,37 @@
                                 });
                                 child.material = newMat;
                             }
+                            modelParts.label.push(child);
                         }
                     }
+                });
+
+                // ==========================================
+                // 部件显示控制 UI (Parts Visibility)
+                // ==========================================
+                const visFolder = gui.addFolder('部件显示控制 (Visibility)');
+                const visSettings = {
+                    showCap: true,
+                    showGlass: true,
+                    showRubber: true,
+                    showPowder: true,
+                    showLabel: true
+                };
+
+                visFolder.add(visSettings, 'showCap').name('金属盖子 (Cap)').onChange((val) => {
+                    modelParts.cap.forEach(mesh => mesh.visible = val);
+                });
+                visFolder.add(visSettings, 'showGlass').name('透明瓶身 (Glass)').onChange((val) => {
+                    modelParts.glass.forEach(mesh => mesh.visible = val);
+                });
+                visFolder.add(visSettings, 'showRubber').name('橡胶塞 (Rubber)').onChange((val) => {
+                    modelParts.rubber.forEach(mesh => mesh.visible = val);
+                });
+                visFolder.add(visSettings, 'showPowder').name('内部粉末 (Powder)').onChange((val) => {
+                    modelParts.powder.forEach(mesh => mesh.visible = val);
+                });
+                visFolder.add(visSettings, 'showLabel').name('外部标签 (Label)').onChange((val) => {
+                    modelParts.label.forEach(mesh => mesh.visible = val);
                 });
 
                 // 添加一个底部极简阴影捕捉平面，增强落地感和质感
