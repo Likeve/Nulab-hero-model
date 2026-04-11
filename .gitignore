@@ -1,3 +1,7 @@
+# 本地保留的 Draco 处理前备份（体积大，勿提交）
+xilingping999_backup_pre_draco.glb
+parking_garage_1k_1024_backup.hdr
+
 .DS_Store
 .vscode/
 node_modules/

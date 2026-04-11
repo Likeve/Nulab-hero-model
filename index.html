@@ -154,6 +154,7 @@
             };
 
             let envMapTexture = null;
+            // parking_garage_1k.hdr：仓库内为 512×256 Radiance（由 1k 压缩，利于 Vercel/embed 下载）
             new RGBELoader()
                 .setDataType(THREE.FloatType)
                 .load('parking_garage_1k.hdr', function (texture) {
