@@ -83,11 +83,35 @@
             color: #8a8a8a;
         }
 
-        /* 响应式：小屏仍占满视口 */
+        /* 平板：≤810px */
         @media (max-width: 810px) {
             .hero-section {
                 min-height: 100dvh;
                 height: 100dvh;
+            }
+            .loading-inner {
+                width: min(300px, 78vw);
+            }
+            .loading-caption {
+                font-size: 10px;
+                letter-spacing: 0.22em;
+            }
+            #canvas-container {
+                touch-action: pan-y pinch-zoom;
+            }
+        }
+        /* 手机：≤390px */
+        @media (max-width: 390px) {
+            .loading-inner {
+                width: min(260px, 86vw);
+            }
+            .loading-bar-track {
+                height: 3px;
+            }
+            .loading-caption {
+                font-size: 9px;
+                letter-spacing: 0.18em;
+                margin-top: 12px;
             }
         }
     </style>
@@ -674,7 +698,8 @@
                         restSize.y * restSize.y +
                         restSize.z * restSize.z
                     );
-                const edgePadding = pxToWorldX(160);
+                const edgePadPx = window.innerWidth <= 390 ? 72 : window.innerWidth <= 810 ? 120 : 160;
+                const edgePadding = pxToWorldX(edgePadPx);
                 const startX = -(frustumW * 0.5 + maxExtentFromCenter + edgePadding);
 
                 // 入场前：父级平移 + 旋转（度 → 弧度），终态 pivot 为「原位 + 向右倾 45°」；子级 model 不再承担入场旋转
@@ -1069,6 +1094,47 @@
                     }
                 }
                 window.addEventListener('wheel', onWheelEntranceGate, { passive: false });
+
+                // 触屏：手指上移（等同「向下滚动」意图）触发入场，与桌面滚轮一致；阈值随 390 / 810 断点收紧
+                let touchGateStartY = null;
+                let touchGateStartX = null;
+                function touchSwipeThreshold() {
+                    const w = window.innerWidth;
+                    if (w <= 390) return 40;
+                    if (w <= 810) return 46;
+                    return 56;
+                }
+                function onTouchStartGate(e) {
+                    if (entranceAnimating || postEntranceZooming || entered) return;
+                    if (e.touches.length !== 1) return;
+                    touchGateStartY = e.touches[0].clientY;
+                    touchGateStartX = e.touches[0].clientX;
+                }
+                function onTouchEndGate(e) {
+                    if (entranceAnimating || postEntranceZooming || entered) return;
+                    if (touchGateStartY == null) return;
+                    if (e.changedTouches.length < 1) {
+                        touchGateStartY = null;
+                        touchGateStartX = null;
+                        return;
+                    }
+                    const t = e.changedTouches[0];
+                    const dy = touchGateStartY - t.clientY;
+                    const dx = Math.abs(t.clientX - touchGateStartX);
+                    touchGateStartY = null;
+                    touchGateStartX = null;
+                    const th = touchSwipeThreshold();
+                    if (dy > th && dy > dx * 0.55) {
+                        runEntranceIn();
+                    }
+                }
+                function onTouchCancelGate() {
+                    touchGateStartY = null;
+                    touchGateStartX = null;
+                }
+                window.addEventListener('touchstart', onTouchStartGate, { passive: true });
+                window.addEventListener('touchend', onTouchEndGate, { passive: true });
+                window.addEventListener('touchcancel', onTouchCancelGate, { passive: true });
 
                 // HDRI 上下旋转动画：营造光线在模型上扫过的质感
                 // 从 -Math.PI 到 Math.PI (360度完整旋转)，首尾相接，持续匀速循环扫描
