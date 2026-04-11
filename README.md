@@ -11,7 +11,7 @@
 - **Three.js** 加载 `xilingping999.glb`（**Draco 网格压缩**；通过 `DRACOLoader` 从 CDN 拉取与当前 Three 版本对齐的 `draco/gltf` 解码器），瓶身玻璃、金属盖、橡胶塞、粉末与双标签独立材质与可见性逻辑（代码内已预留）。
 - **透明背景：** `WebGLRenderer` 使用 `alpha: true`，`scene.background = null`，`setClearColor(…, 0)`，页面 `html/body` 与画布容器为透明，便于 iframe 或叠在其它页面上。若玻璃 Transmission 发雾，可按 `index.html` 注释改回纯色 `scene.background`。
 - **HDRI**（默认 `parking_garage_1k.hdr`）经 PMREM 生成环境；支持环境旋转与循环扫光动画。
-- **滚轮交互：** 模型就绪后相机先置于**远景**（默认视距 ×`POST_ENTRANCE_ZOOM_FROM_FACTOR`）；首次**向下滚动**播放入场（屏外滑入 + 旋转 + 运动模糊）**全程远景起画**；**dolly 回默认机位** `(0,0,8)` 与瓶身入场在同一 GSAP 时间轴上：**提前 `ZOOM_LEAD`（默认 1s）**开推、**约 3s**、**匀速**（`ease: 'none'`，可调 `POST_ENTRANCE_ZOOM_DUR`）。整段序列结束前会暂时屏蔽页面默认滚动。
+- **滚轮交互：** 模型就绪后相机先置于**远景**（默认视距 ×`POST_ENTRANCE_ZOOM_FROM_FACTOR`）；首次**向下滚动**播放入场（屏外滑入 + 旋转 + 运动模糊）**全程远景起画**；**dolly 回默认机位** `(0,0,8)` 与瓶身入场在同一 GSAP 时间轴上：**提前 `ZOOM_LEAD`（默认 1s）**开推、**约 3s**、**匀速**（`ease: 'none'`，可调 `POST_ENTRANCE_ZOOM_DUR`）。**入场与 zoom 播放中不拦截滚轮**（便于嵌入 Framer iframe 时父页仍可滚动）；仅**首次**触发入场的那一下 `preventDefault`，避免同一次滚动既开动画又带动页面。
 - **相机：** TrackballControls，松手后沿路径回弹至默认视角；可选**瓶身绕自身 Y 轴自转**（相机不公转；自转与 **dolly zoom in 同帧启动**，即 `ZOOM_LEAD` 时刻，早于整段入场时间轴结束）。
 - **调试 UI（lil-gui）：** 当前版本已**整体注释关闭**，便于正式展示；恢复方式见下文「恢复调试面板」。
 

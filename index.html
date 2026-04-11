@@ -1002,10 +1002,11 @@
                 }
 
                 function onWheelEntranceGate(e) {
+                    // 入场 / zoom 播放中不再 preventDefault：嵌入 Framer（iframe）时否则会吞掉整页滚动
                     if (entranceAnimating || postEntranceZooming) {
-                        e.preventDefault();
                         return;
                     }
+                    // 仅首次向下滚触发动画时拦截，避免同一滚既入场又带动父级滚动一截
                     if (!entered && e.deltaY > 0) {
                         e.preventDefault();
                         runEntranceIn();
