@@ -8,11 +8,27 @@
 
 ## 功能概览
 
-- **Three.js** 加载 `xilingping999.glb`，瓶身玻璃、金属盖、橡胶塞、粉末与双标签独立材质与可见性逻辑（代码内已预留）。
+- **Three.js** 加载 `xilingping999.glb`（**Draco 网格压缩**；通过 `DRACOLoader` 从 CDN 拉取与当前 Three 版本对齐的 `draco/gltf` 解码器），瓶身玻璃、金属盖、橡胶塞、粉末与双标签独立材质与可见性逻辑（代码内已预留）。
 - **HDRI**（默认 `parking_garage_1k.hdr`）经 PMREM 生成环境；支持环境旋转与循环扫光动画。
-- **滚轮交互：** 首次**向下滚动**立即播放入场（屏外滑入 + 旋转 + 运动模糊）；入场后不再通过向上滚退场；入场动画进行中会暂时屏蔽页面默认滚动。
-- **相机：** TrackballControls，松手后沿路径回弹至默认视角；可选自动旋转（与入场门控联动）。
+- **滚轮交互：** 模型就绪后相机先置于**远景**（默认视距 ×`POST_ENTRANCE_ZOOM_FROM_FACTOR`）；首次**向下滚动**播放入场（屏外滑入 + 旋转 + 运动模糊）**全程远景起画**；**dolly 回默认机位** `(0,0,8)` 与瓶身入场在同一 GSAP 时间轴上：**提前 `ZOOM_LEAD`（默认 1s）**开推、**约 3s**、**匀速**（`ease: 'none'`，可调 `POST_ENTRANCE_ZOOM_DUR`）。整段序列结束前会暂时屏蔽页面默认滚动。
+- **相机：** TrackballControls，松手后沿路径回弹至默认视角；可选**瓶身绕自身 Y 轴自转**（相机不公转；自转与 **dolly zoom in 同帧启动**，即 `ZOOM_LEAD` 时刻，早于整段入场时间轴结束）。
 - **调试 UI（lil-gui）：** 当前版本已**整体注释关闭**，便于正式展示；恢复方式见下文「恢复调试面板」。
+
+---
+
+## Framer 代码组件（上传 GLB / HDR）
+
+仓库内提供 **`framer/NulabBottleHero3D.tsx`**，可将当前场景迁入 Framer 的 **Code** 组件使用。
+
+1. 在 Framer 项目中 **Assets** 或使用外链准备好 `.glb`、`.hdr`。
+2. **Code → New File**，粘贴 `NulabBottleHero3D.tsx` 全文（或复制到现有 Code 文件）。
+3. 在该 Code 文件的 **Dependencies** 中添加 npm 包：**`three`**、**`gsap`**（版本与本地一致即可，建议 `three@0.164.x`）。
+4. 将组件拖入画布；在右侧面板中：
+   - **模型 GLB / 环境 HDR**：使用文件槽上传（`ControlType.File`），上传后 Framer 会注入完整 URL；
+   - 若暂不上传，可填写 **模型备用 URL** / **HDR 备用 URL**（任意可跨域访问的直链）。
+5. 网格命名需与 `index.html` 中一致（如 `jingshugaizi`、`pingsheng1`、`biaoqian` 等），否则材质不会自动匹配。
+
+说明：Code 组件为便于维护的精简移植；与纯 `index.html` 相比已去掉 lil-gui。**`GLTFLoader` / `RGBELoader` / `DRACOLoader`** 使用 `three/examples/jsm/loaders/...`（Draco 解码脚本从 `unpkg` 按 `three` 的 `REVISION` 取与 npm 包一致的 `examples/jsm/libs/draco/gltf/`）；**相机拖拽**在组件内自实现（球坐标 + Pointer），避免导入 `TrackballControls`——Framer 易将其解析到 `@types/three` 下的路径并报错。`three/addons/...` 仅适合带 import map 的浏览器直链。
 
 ---
 
@@ -34,7 +50,7 @@ python3 -m http.server 8765
 | 类型 | 说明 |
 |------|------|
 | `index.html` | 主页面：场景、材质、动画、滚轮门控、（可选）GUI |
-| `xilingping999.glb` | 当前入口加载的模型文件 |
+| `xilingping999.glb` | 当前入口加载的模型文件（建议 glTF 导出时启用 **Draco**；页面已接好解码器） |
 | `*.hdr` | 环境贴图资源，可在代码中切换路径 |
 | `bottle.glb` | 备用模型（未默认引用时可作替换参考） |
 

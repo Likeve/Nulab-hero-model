@@ -96,7 +96,11 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
         import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+        /** 与 import map 中 three 版本一致；Draco 压缩的 glTF/GLB 需从此路径加载 wasm/js 解码器 */
+        const DRACO_DECODER_BASE = 'https://unpkg.com/three@0.164.0/examples/jsm/libs/draco/gltf/';
 
         let camera, scene, renderer, controls;
 
@@ -232,7 +236,8 @@
                 });
             });
             
-            // 将 autoRotate 状态暴露给全局，方便在 animate 中访问
+            // 将 autoRotate 状态暴露给全局，方便在 animate 中访问（瓶身绕自身局部 Y 自转，不再旋转相机）
+            window._heroBottleRoot = null; // GLB 根节点，加载完成后赋值
             window._autoRotateSettings = {
                 enabled: true,
                 speed: -0.8,
@@ -533,10 +538,15 @@
             powderFolder.close();
             */
 
-            // 7. 加载模型
+            // 7. 加载模型（xilingping999 使用 Draco 网格压缩时需 DRACOLoader）
+            const dracoLoader = new DRACOLoader();
+            dracoLoader.setDecoderPath(DRACO_DECODER_BASE);
             const loader = new GLTFLoader();
+            loader.setDRACOLoader(dracoLoader);
             loader.load('xilingping999.glb', function (gltf) {
+                dracoLoader.dispose();
                 const model = gltf.scene;
+                window._heroBottleRoot = model;
                 
                 // 居中和缩放模型以完美适配视图
                 const box = new THREE.Box3().setFromObject(model);
@@ -554,15 +564,38 @@
                 const modelPivot = new THREE.Group();
                 modelPivot.add(model);
 
-                // 将屏幕水平像素偏移换算为近似世界坐标 X（透视相机、看向原点）
+                /** 入场结束后的默认姿态：绕世界 Z 轴向屏右倾斜 45°（相机在 +Z 看向原点时，负 Z 旋转使瓶身上部倒向 +X）；瓶身自转由 GLB 根节点 rotation.y 驱动 */
+                const MODEL_REST_ROT_X = 0;
+                const MODEL_REST_ROT_Y = 0;
+                const MODEL_REST_ROT_Z = THREE.MathUtils.degToRad(-45);
+
+                /** 默认机位、入场全程与 zoom 起点共用：先拉远，入场与运动模糊在远景下播放，结束后再 dolly 回默认 */
+                const cameraDefaultRest = new THREE.Vector3(0, 0, 8);
+                const POST_ENTRANCE_ZOOM_FROM_FACTOR = 1.58;
+                const POST_ENTRANCE_ZOOM_DUR = 3;
+                const entranceDur = 1.5;
+                /** dolly zoom 较瓶身入场结束时刻提前启动的秒数（与入场时间轴并行） */
+                const ZOOM_LEAD = 1;
+                const camOrigin = new THREE.Vector3(0, 0, 0);
+                const camViewDir = cameraDefaultRest.clone().sub(camOrigin).normalize();
+                const cameraFarIntro = camOrigin.clone().add(
+                    camViewDir.clone().multiplyScalar(
+                        cameraDefaultRest.distanceTo(camOrigin) * POST_ENTRANCE_ZOOM_FROM_FACTOR
+                    )
+                );
+                camera.position.copy(cameraFarIntro);
+                camera.lookAt(0, 0, 0);
+                controls.update();
+
+                // 将屏幕水平像素偏移换算为近似世界坐标 X（透视相机、看向原点；此时已为远景机位）
                 const camDist = camera.position.length();
                 const frustumH = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5) * camDist;
                 const frustumW = frustumH * camera.aspect;
                 const pxToWorldX = (px) => (px / container.clientWidth) * frustumW;
 
-                // 阴影平面：在默认姿态下取模型底面（与入场旋转无关）
+                // 阴影平面：按入场终态（含向右 45° 倾角）取模型最低点，避免倾斜后“悬空”阴影
                 modelPivot.position.set(0, 0, 0);
-                modelPivot.rotation.set(0, 0, 0);
+                modelPivot.rotation.set(MODEL_REST_ROT_X, MODEL_REST_ROT_Y, MODEL_REST_ROT_Z);
                 modelPivot.updateMatrixWorld(true);
                 const restBox = new THREE.Box3().setFromObject(modelPivot);
                 const shadowGroundY = restBox.min.y - 0.02;
@@ -578,7 +611,7 @@
                 const edgePadding = pxToWorldX(160);
                 const startX = -(frustumW * 0.5 + maxExtentFromCenter + edgePadding);
 
-                // 入场前：父级平移 + 旋转（度 → 弧度），终态 pivot 为 0；子级 model 不再承担入场旋转
+                // 入场前：父级平移 + 旋转（度 → 弧度），终态 pivot 为「原位 + 向右倾 45°」；子级 model 不再承担入场旋转
                 modelPivot.position.set(startX, 0, 0);
                 modelPivot.rotation.set(
                     THREE.MathUtils.degToRad(180),
@@ -860,11 +893,11 @@
                 scene.add(modelPivot);
 
                 // 滚轮：仅向下触发入场；已入场后不再响应向上滚（无退场）。
-                const entranceDur = 1.5;
                 const BLUR_MAX = { x: 34, y: 7 };
                 let entered = false;
                 let entranceAnimating = false;
                 let entranceTl = null;
+                let postEntranceZooming = false;
 
                 controls.enabled = false;
                 if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
@@ -874,8 +907,10 @@
                         entranceTl.kill();
                         entranceTl = null;
                     }
+                    postEntranceZooming = false;
                     gsap.killTweensOf(modelPivot.position);
                     gsap.killTweensOf(modelPivot.rotation);
+                    gsap.killTweensOf(camera.position);
                     renderer.domElement.style.filter = 'none';
                 }
 
@@ -901,17 +936,23 @@
                     if (entered || entranceAnimating) return;
                     entranceAnimating = true;
                     killEntranceTimeline();
+                    camera.position.copy(cameraFarIntro);
+                    camera.lookAt(0, 0, 0);
+                    controls.update();
                     controls.enabled = false;
                     if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
 
                     const blurFilter = document.getElementById('blur-filter');
                     const blurParams = { x: BLUR_MAX.x, y: BLUR_MAX.y };
+                    const zoomT0 = Math.max(0, entranceDur - ZOOM_LEAD);
                     entranceTl = gsap.timeline({
                         onComplete: () => {
                             entranceAnimating = false;
                             entered = true;
+                            postEntranceZooming = false;
+                            camera.position.copy(cameraDefaultRest);
+                            camera.lookAt(0, 0, 0);
                             controls.enabled = true;
-                            if (window._autoRotateSettings) window._autoRotateSettings.enabled = true;
                             entranceTl = null;
                         }
                     });
@@ -924,16 +965,34 @@
                         ease: 'power2.inOut'
                     }, 0);
                     entranceTl.to(modelPivot.rotation, {
-                        x: 0,
-                        y: 0,
-                        z: 0,
+                        x: MODEL_REST_ROT_X,
+                        y: MODEL_REST_ROT_Y,
+                        z: MODEL_REST_ROT_Z,
                         duration: entranceDur,
                         ease: 'power2.inOut'
                     }, 0);
+                    entranceTl.to(
+                        camera.position,
+                        {
+                            x: cameraDefaultRest.x,
+                            y: cameraDefaultRest.y,
+                            z: cameraDefaultRest.z,
+                            duration: POST_ENTRANCE_ZOOM_DUR,
+                            ease: 'none',
+                            onStart: () => {
+                                postEntranceZooming = true;
+                                if (window._autoRotateSettings) window._autoRotateSettings.enabled = true;
+                            },
+                            onUpdate: () => {
+                                camera.lookAt(0, 0, 0);
+                            }
+                        },
+                        zoomT0
+                    );
                 }
 
                 function onWheelEntranceGate(e) {
-                    if (entranceAnimating) {
+                    if (entranceAnimating || postEntranceZooming) {
                         e.preventDefault();
                         return;
                     }
@@ -975,6 +1034,7 @@
 
             }, undefined, function (error) {
                 console.error(error);
+                dracoLoader.dispose();
                 const loading = document.getElementById('loading');
                 if (loading) loading.innerText = ''; // 去除错误时的文字提示
             });
@@ -994,16 +1054,17 @@
             // 控制器更新，包括阻尼
             controls.update();
 
-            // 自行实现的 autoRotate：如果开启且用户没有在拖拽也没有在自动复位中
-            if (window._autoRotateSettings && window._autoRotateSettings.enabled && !window._autoRotateSettings.isDragging() && !window._autoRotateSettings.isResetting()) {
-                // TrackballControls 下，我们可以通过基于相机 up 轴旋转 position 和 up 来实现模型旋转的错觉
-                // autoRotateSpeed 保持和 OrbitControls 一致的行为感觉 (-0.8 代表每帧较慢的旋转)
+            // 瓶身自转：绕 GLB 根节点局部 Y 轴旋转（相机不动）；enabled 在 dolly zoom 的 onStart 与整段入场结束时的 controls 同步打开
+            const bottle = window._heroBottleRoot;
+            if (
+                bottle &&
+                window._autoRotateSettings &&
+                window._autoRotateSettings.enabled &&
+                !window._autoRotateSettings.isDragging() &&
+                !window._autoRotateSettings.isResetting()
+            ) {
                 const speed = window._autoRotateSettings.speed * 0.002;
-                
-                // 绕着 Y 轴旋转相机
-                const axis = new THREE.Vector3(0, 1, 0);
-                camera.position.applyAxisAngle(axis, speed);
-                camera.up.applyAxisAngle(axis, speed);
+                bottle.rotation.y += speed;
             }
 
             renderer.render(scene, camera);
