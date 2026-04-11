@@ -5,10 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D 西林瓶 - 前卫生化质感</title>
     <style>
+        html {
+            background: transparent;
+        }
         body {
             margin: 0;
             overflow-x: hidden;
-            background: #000000; /* 纯黑背景 (Dark Mode) */
+            background: transparent; /* 与画布 alpha 一致，便于嵌入或透出下层页面 */
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             user-select: none;
             -webkit-user-select: none;
@@ -25,6 +28,7 @@
             padding: 0;
             box-sizing: border-box;
             position: relative;
+            background: transparent;
         }
         #canvas-container {
             width: 100%;
@@ -32,6 +36,7 @@
             max-width: 100%;
             position: relative;
             cursor: grab;
+            background: transparent;
         }
         #canvas-container:active {
             cursor: grabbing;
@@ -114,6 +119,7 @@
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setClearColor(0x000000, 0);
             
             // 色调映射与曝光，营造高级摄影质感
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -122,11 +128,15 @@
             // 启用阴影
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.domElement.style.display = 'block';
+            renderer.domElement.style.background = 'transparent';
             container.appendChild(renderer.domElement);
 
             // 2. 场景设置
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x000000); // 【关键修复】为场景指定纯黑物理背景，解决开启 alpha 时 Transmission 材质通道混合导致发白发雾的 WebGL 渲染 Bug
+            // null = 不绘制场景底色，配合 alpha:true + setClearColor(..., 0) 得到透明背景（嵌入 Framer/网页时透出下层）
+            // 若玻璃 Transmission 出现发雾/发白，可改回 scene.background = new THREE.Color(0x000000)
+            scene.background = null;
             
             // 3. 相机设置 - 略带长焦感(35mm)，减少透视畸变，更显严谨和冷静
             camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 100);
