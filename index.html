@@ -260,6 +260,9 @@
 
             // 5. 交互控制器 (TrackballControls，实现全方位无死角斜向自由拖拽，就像把玩实物一样)
             controls = new TrackballControls(camera, renderer.domElement);
+            // 关键修复：TrackballControls 默认会将 touchAction 设为 'none' 吞掉所有滚动。
+            // 这里强制改回 'pan-y pinch-zoom'，实现：垂直滑动滚页面，水平滑动转模型
+            renderer.domElement.style.touchAction = 'pan-y pinch-zoom';
             controls.rotateSpeed = 3.0;
             controls.noZoom = true; // 禁止缩放
             controls.noPan = true; // 禁止平移
