@@ -59,8 +59,8 @@
     </style>
 </head>
 <body>
-    <!-- 引入自定义 SVG 滤镜，用于实现真实的定向动态模糊 (Motion Blur) -->
-    <svg xmlns="http://www.w3.org/2000/svg" style="width:0;height:0;position:absolute;">
+    <!-- 入场阶段画布 CSS 动态模糊（feGaussianBlur，随 GSAP 淡出） -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="width:0;height:0;position:absolute;" aria-hidden="true">
         <defs>
             <filter id="motion-blur" x="-50%" y="-50%" width="200%" height="200%">
                 <feGaussianBlur id="blur-filter" in="SourceGraphic" stdDeviation="0 0" />
@@ -94,6 +94,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TrackballControls } from 'three/addons/controls/TrackballControls.js';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 
@@ -182,27 +183,69 @@
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
             scene.add(ambientLight);
 
-            // 5. 交互控制器 (限制性交互)
-            controls = new OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.04; // 增加阻尼顺滑度，提升高级感
+            // 5. 交互控制器 (TrackballControls，实现全方位无死角斜向自由拖拽，就像把玩实物一样)
+            controls = new TrackballControls(camera, renderer.domElement);
+            controls.rotateSpeed = 3.0;
+            controls.noZoom = true; // 禁止缩放
+            controls.noPan = true; // 禁止平移
+            controls.staticMoving = false; // 关闭静态移动，也就是开启阻尼顺滑效果
+            controls.dynamicDampingFactor = 0.04; // 阻尼力度
+
+            // 由于 TrackballControls 默认没有 autoRotate，我们自己接管自动旋转逻辑
+            let isDragging = false;
+            let isResetting = false;
+            let resetTweenPos = null;
+            let resetTweenUp = null;
+
+            controls.addEventListener('start', () => { 
+                isDragging = true; 
+                isResetting = false;
+                if (resetTweenPos) resetTweenPos.kill();
+                if (resetTweenUp) resetTweenUp.kill();
+            });
+
+            controls.addEventListener('end', () => { 
+                isDragging = false; 
+                isResetting = true;
+
+                // 释放鼠标后，使用 GSAP 平滑地将相机恢复到默认初始状态
+                // 关键修复：不能直接用 GSAP 线性修改 x, y, z，那会让相机走“直线捷径”穿过模型内部，导致视觉上瞬间放大穿模。
+                // 必须使用球面插值 (Slerp) 或保持半径，让相机沿着圆弧轨迹飞回。
+                let dummy = { t: 0 };
+                let startPos = camera.position.clone();
+                let targetPos = new THREE.Vector3(0, 0, 8); // 默认初始位置
+                let startUp = camera.up.clone();
+                let targetUp = new THREE.Vector3(0, 1, 0);  // 默认向上的向量
+                let radius = startPos.length(); // 保持拖拽时的当前半径
+
+                resetTweenPos = gsap.to(dummy, {
+                    t: 1,
+                    duration: 2.5, // 回弹时间延长，动作更缓慢优雅
+                    ease: "power4.out", // 极强的缓出曲线，让运动一开始快，然后在靠近原点时非常缓慢地减速停下
+                    onUpdate: () => {
+                        // 使用 lerp 后再 normalize() 乘上半径，这在数学上等同于完美的球面圆弧运动，确保相机和模型的距离永远恒定！
+                        camera.position.copy(startPos).lerp(targetPos, dummy.t).normalize().multiplyScalar(radius);
+                        camera.up.copy(startUp).lerp(targetUp, dummy.t).normalize();
+                        camera.lookAt(0, 0, 0);
+                    },
+                    onComplete: () => { isResetting = false; }
+                });
+            });
             
-            controls.enableZoom = false; // 禁止缩放
-            controls.enablePan = false; // 禁止平移
-            
-            // 限制垂直旋转角度，只能水平查看，保持优雅固定的姿态
-            // Math.PI / 2.05 代表正视略微俯视一点点
-            const fixedPolar = Math.PI / 2.05;
-            controls.minPolarAngle = fixedPolar;
-            controls.maxPolarAngle = fixedPolar;
-            
-            // 自动缓慢旋转
-            controls.autoRotate = true;
-            controls.autoRotateSpeed = -0.8; // 负值代表顺时针旋转
+            // 将 autoRotate 状态暴露给全局，方便在 animate 中访问
+            window._autoRotateSettings = {
+                enabled: true,
+                speed: -0.8,
+                isDragging: () => isDragging,
+                isResetting: () => isResetting
+            };
 
             // ==========================================
-            // 调试面板 (lil-gui) - 用于手动调整光照和环境
+            // 调试面板 (lil-gui) — 已关闭：恢复时删除下一行 `let gui = null`，并取消 GUI_RESTORE_BLOCK_A / _B / _C 三处块注释（须一并恢复）
             // ==========================================
+            let gui = null;
+
+            /* GUI_RESTORE_BLOCK_A 光照与环境（恢复时去掉本行与对应闭合行的星杠注释）
             const gui = new lil.GUI({ title: '光照与环境控制' });
             
             // 全局曝光
@@ -241,6 +284,7 @@
             const ambFolder = gui.addFolder('全局兜底光 (AmbientLight)');
             ambFolder.add(ambientLight, 'visible').name('开启/关闭');
             ambFolder.add(ambientLight, 'intensity', 0, 2).name('强度');
+            */
 
             // 生成横向拉丝纹理（程序化生成，用作粗糙度和凹凸贴图，完美规避接缝色块又提供物理拉丝感）
             // 增强：加入了更多的随机短横线和颗粒微小瑕疵，使其更有手工拉丝和真实金属的随机感
@@ -409,9 +453,10 @@
 
             // 橡胶塞
             const rubber = new THREE.MeshStandardMaterial({
-                color: 0x666666, // 参考图中隐约可见灰色
-                roughness: 0.7,
-                metalness: 0.1
+                color: 0x4E4E4E, // 极深灰色/近黑
+                roughness: 0.1,  // 极度粗糙，吸收表面反光
+                metalness: 0.0,  // 移除金属度，避免金属反光
+                envMapIntensity: 0.1 // 【关键】大幅降低环境光反射，避免在高曝光的 HDRI 环境下被整体照亮泛灰
             });
 
             // 生化粉末质感 (实质的白色颗粒粉末)
@@ -436,9 +481,12 @@
                 glass: [],
                 rubber: [],
                 powder: [],
-                label: []
+                label: [], // 全部标签网格（兼容）
+                label1: [], // biaoqian1（不含 _2）
+                label2: [] // biaoqian1_2
             };
 
+            /* GUI_RESTORE_BLOCK_B 材质 folders（须与 BLOCK_A 同时恢复）
             const matFolder = gui.addFolder('材质属性控制 (Materials)');
             
             const glassFolder = matFolder.addFolder('高透玻璃 (Glass)');
@@ -483,6 +531,7 @@
             powderFolder.addColor(powderColorObj, 'color').name('粉末底色').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.color.setHex(val)) });
             powderFolder.addColor(powderColorObj, 'emissive').name('自发光颜色').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.emissive.setHex(val)) });
             powderFolder.close();
+            */
 
             // 7. 加载模型
             const loader = new GLTFLoader();
@@ -491,22 +540,113 @@
                 
                 // 居中和缩放模型以完美适配视图
                 const box = new THREE.Box3().setFromObject(model);
-                const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
                 const maxDim = Math.max(size.x, size.y, size.z);
                 const scale = 3.2 / maxDim; // 调整最佳视觉缩放比例
                 
                 model.scale.setScalar(scale);
-                
-                // 目标默认位置
-                const targetX = -center.x * scale;
-                const targetY = -center.y * scale;
-                const targetZ = -center.z * scale;
-                
-                // 设置入场动画的初始状态 (左侧、略远、向内倾斜旋转)
-                // y轴正值到0是减小，在Three.js中代表顺时针旋转
-                model.position.set(targetX - 1.5, targetY + 0.2, targetZ - 6);
-                model.rotation.set(-0.15, Math.PI * 0.7, -0.15);
+
+                // 把包围盒几何中心移到 model 局部原点，再挂到父级 Group：旋转即绕模型正中
+                const boxScaled = new THREE.Box3().setFromObject(model);
+                const geoCenter = boxScaled.getCenter(new THREE.Vector3());
+                model.position.sub(geoCenter);
+
+                const modelPivot = new THREE.Group();
+                modelPivot.add(model);
+
+                // 将屏幕水平像素偏移换算为近似世界坐标 X（透视相机、看向原点）
+                const camDist = camera.position.length();
+                const frustumH = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5) * camDist;
+                const frustumW = frustumH * camera.aspect;
+                const pxToWorldX = (px) => (px / container.clientWidth) * frustumW;
+
+                // 阴影平面：在默认姿态下取模型底面（与入场旋转无关）
+                modelPivot.position.set(0, 0, 0);
+                modelPivot.rotation.set(0, 0, 0);
+                modelPivot.updateMatrixWorld(true);
+                const restBox = new THREE.Box3().setFromObject(modelPivot);
+                const shadowGroundY = restBox.min.y - 0.02;
+
+                // 起始 X：保证整瓶在画面左侧外（视锥半宽 + 物体最远点半径 + 裕量），避免固定 600px 在部分屏宽下仍露边
+                const restSize = restBox.getSize(new THREE.Vector3());
+                const maxExtentFromCenter =
+                    0.5 * Math.sqrt(
+                        restSize.x * restSize.x +
+                        restSize.y * restSize.y +
+                        restSize.z * restSize.z
+                    );
+                const edgePadding = pxToWorldX(160);
+                const startX = -(frustumW * 0.5 + maxExtentFromCenter + edgePadding);
+
+                // 入场前：父级平移 + 旋转（度 → 弧度），终态 pivot 为 0；子级 model 不再承担入场旋转
+                modelPivot.position.set(startX, 0, 0);
+                modelPivot.rotation.set(
+                    THREE.MathUtils.degToRad(180),
+                    THREE.MathUtils.degToRad(-80),
+                    THREE.MathUtils.degToRad(154)
+                );
+                model.rotation.set(0, 0, 0);
+
+                // 动态生成基于 Object 坐标系的圆柱投影 UV (用于修复拉丝方向不一致的问题)
+                function generateCylindricalUV2(geometry) {
+                    if (!geometry.attributes.position) return;
+                    const pos = geometry.attributes.position;
+                    const count = pos.count;
+                    const uv2 = new Float32Array(count * 2);
+                    
+                    geometry.computeBoundingBox();
+                    const min = geometry.boundingBox.min;
+                    const max = geometry.boundingBox.max;
+                    const height = (max.y - min.y) || 1;
+                    
+                    for (let i = 0; i < count; i++) {
+                        const x = pos.getX(i);
+                        const y = pos.getY(i);
+                        const z = pos.getZ(i);
+                        
+                        // 圆柱投影：水平绕 Y 轴的角度作为 U，Y 轴高度作为 V
+                        const theta = Math.atan2(z, x); // -PI to PI
+                        let u = (theta + Math.PI) / (2 * Math.PI); // 0 to 1
+                        let v = (y - min.y) / height; // 0 to 1
+                        
+                        uv2[i * 2] = u;
+                        uv2[i * 2 + 1] = v;
+                    }
+                    
+                    // 【重要修复】：在 Three.js 最新版本中，texture.channel = 1 对应的是 'uv1' 属性，而不是以前老版本里的 'uv2'。
+                    geometry.setAttribute('uv1', new THREE.BufferAttribute(uv2, 2));
+                }
+
+                function setupLabelMeshMaterial(child) {
+                    // 为标签网格动态生成第二套基于 Object 坐标系的 UV
+                    generateCylindricalUV2(child.geometry);
+
+                    if (!child.material) return;
+                    const brushedForLabel = brushedTex.clone();
+                    brushedForLabel.channel = 1; // 关键魔法：强制让这张贴图使用刚才基于 Object 生成的 uv1
+                    brushedForLabel.needsUpdate = true;
+                    
+                    const noiseForLabel = noiseTex.clone();
+                    noiseForLabel.channel = 1; // 关键魔法：强制让这张贴图使用刚才基于 Object 生成的 uv1
+                    noiseForLabel.needsUpdate = true;
+                    noiseForLabel.repeat.set(2, 2);
+                    
+                    const newMat = new THREE.MeshPhysicalMaterial({
+                        map: child.material.map,
+                        color: 0xffffff,
+                        metalness: 1.0,
+                        roughness: 0.45,
+                        roughnessMap: brushedForLabel,
+                        bumpMap: brushedForLabel,
+                        bumpScale: 0.002,
+                        clearcoat: 0.1,
+                        clearcoatRoughness: 0.3,
+                        envMapIntensity: 1.8
+                    });
+                    child.userData.brushedTex = brushedForLabel;
+                    child.userData.noiseTex = noiseForLabel;
+                    child.material = newMat;
+                }
 
             // 遍历并精确替换材质
             model.traverse((child) => {
@@ -536,28 +676,144 @@
                         // 【修复关键点】：克隆白粉材质，避免与玻璃可能共享同一个默认材质（比如都是从glb导出的默认白色），从而解决一调玻璃粉末也跟着变颜色的问题
                         child.material = whitePowder.clone();
                         modelParts.powder.push(child);
-                    } else if (name.includes('biaoqian')) {
-                            // 标签 -> 金属纸带横向拉丝质感
-                            if (child.material) {
-                                // 升级为物理材质并引入横向拉丝纹理
-                                const newMat = new THREE.MeshPhysicalMaterial({
-                                    map: child.material.map, // 保留原有的贴图（Logo等）
-                                    color: 0xffffff,
-                                    metalness: 1.0, // 纯金属质感
-                                    roughness: 0.45,
-                                    roughnessMap: brushedTex, // 细微的横向粗糙度分布
-                                    bumpMap: brushedTex, // 打碎反光，产生更真实的随机拉丝高光和噪点
-                                    bumpScale: 0.002, // 稍微加大标签的拉丝凹凸强度，凸显随机金属颗粒感
-                                    clearcoat: 0.1, // 微量保护清漆
-                                    clearcoatRoughness: 0.3,
-                                    envMapIntensity: 1.8 // 增强反射
-                                });
-                                child.material = newMat;
-                            }
+                    } else if (name.includes('biaoqian1_2')) {
+                            // 外部标签 ②（须先于 biaoqian 判断，否则会被误归入 label1）
+                            setupLabelMeshMaterial(child);
+                            modelParts.label2.push(child);
+                            modelParts.label.push(child);
+                        } else if (name.includes('biaoqian')) {
+                            // 外部标签 ①
+                            setupLabelMeshMaterial(child);
+                            modelParts.label1.push(child);
                             modelParts.label.push(child);
                         }
                     }
                 });
+
+                // 外部标签 / 部件显示 GUI — 已关闭，恢复时取消 GUI_RESTORE_BLOCK_C 注释
+                /* GUI_RESTORE_BLOCK_C 标签与部件显示（须与 BLOCK_A、BLOCK_B 同时恢复）
+                function addExternalLabelGui(meshList, folderTitle) {
+                    if (!meshList.length) return;
+                    function forMat(fn) {
+                        meshList.forEach((mesh) => fn(mesh.material));
+                    }
+                    const lm0 = meshList[0].material;
+                    const labelFolder = matFolder.addFolder(folderTitle);
+
+                    const styleSettings = { textureType: 'brushed' };
+                    labelFolder.add(styleSettings, 'textureType', { '拉丝金属 (Brushed)': 'brushed', '均匀磨砂颗粒 (Frosted)': 'frosted' })
+                        .name('表面质感')
+                        .onChange((val) => {
+                            meshList.forEach((mesh) => {
+                                const m = mesh.material;
+                                if (val === 'brushed') {
+                                    m.roughnessMap = mesh.userData.brushedTex || null;
+                                    m.bumpMap = mesh.userData.brushedTex || null;
+                                } else {
+                                    m.roughnessMap = mesh.userData.noiseTex || null;
+                                    m.bumpMap = mesh.userData.noiseTex || null;
+                                }
+                                m.needsUpdate = true;
+                            });
+                        });
+
+                    labelFolder.add(lm0, 'roughness', 0, 1).name('粗糙度').onChange((v) => forMat((m) => { m.roughness = v; }));
+                    labelFolder.add(lm0, 'metalness', 0, 1).name('金属度').onChange((v) => forMat((m) => { m.metalness = v; }));
+                    labelFolder.add(lm0, 'bumpScale', 0, 0.02).name('拉丝凹凸强度').onChange((v) => forMat((m) => { m.bumpScale = v; }));
+                    labelFolder.add(lm0, 'envMapIntensity', 0, 5).name('环境反射强度').onChange((v) => forMat((m) => { m.envMapIntensity = v; }));
+                    labelFolder.add(lm0, 'clearcoat', 0, 1).name('清漆').onChange((v) => forMat((m) => { m.clearcoat = v; }));
+                    labelFolder.add(lm0, 'clearcoatRoughness', 0, 1).name('清漆粗糙度').onChange((v) => forMat((m) => { m.clearcoatRoughness = v; }));
+
+                    const labelColorObj = { color: lm0.color.getHex() };
+                    labelFolder.addColor(labelColorObj, 'color').name('标签底色').onChange((val) => forMat((m) => m.color.setHex(val)));
+
+                    const mapTexFolder = labelFolder.addFolder('Logo 底图 (map)');
+                    const maxAniso = Math.min(16, renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 16);
+                    const mapSettings = {
+                        useMap: true,
+                        offsetX: lm0.map ? lm0.map.offset.x : 0,
+                        offsetY: lm0.map ? lm0.map.offset.y : 0,
+                        repeatX: lm0.map ? lm0.map.repeat.x : 1,
+                        repeatY: lm0.map ? lm0.map.repeat.y : 1,
+                        rotation: lm0.map ? lm0.map.rotation : 0,
+                        anisotropy: lm0.map && lm0.map.anisotropy !== undefined ? lm0.map.anisotropy : 1,
+                        wrap: lm0.map ? lm0.map.wrapS : THREE.ClampToEdgeWrapping
+                    };
+
+                    function applyMapUV() {
+                        forMat((m) => {
+                            const t = m.map;
+                            if (!t) return;
+                            t.offset.set(mapSettings.offsetX, mapSettings.offsetY);
+                            t.repeat.set(mapSettings.repeatX, mapSettings.repeatY);
+                            t.rotation = mapSettings.rotation;
+                            t.anisotropy = mapSettings.anisotropy;
+                            t.needsUpdate = true;
+                        });
+                    }
+
+                    mapTexFolder.add(mapSettings, 'useMap').name('显示 Logo 贴图').onChange((on) => {
+                        forMat((m) => {
+                            if (on) {
+                                if (m.userData._savedMap) m.map = m.userData._savedMap;
+                            } else {
+                                if (m.map) m.userData._savedMap = m.map;
+                                m.map = null;
+                            }
+                            m.needsUpdate = true;
+                        });
+                    });
+                    mapTexFolder.add(mapSettings, 'offsetX', -2, 2).name('偏移 U').onChange(applyMapUV);
+                    mapTexFolder.add(mapSettings, 'offsetY', -2, 2).name('偏移 V').onChange(applyMapUV);
+                    mapTexFolder.add(mapSettings, 'repeatX', 0.05, 8).name('平铺 U').onChange(applyMapUV);
+                    mapTexFolder.add(mapSettings, 'repeatY', 0.05, 8).name('平铺 V').onChange(applyMapUV);
+                    mapTexFolder.add(mapSettings, 'rotation', -Math.PI, Math.PI).name('旋转 (rad)').onChange(applyMapUV);
+                    mapTexFolder.add(mapSettings, 'anisotropy', 1, maxAniso).name('各向异性过滤').onChange(applyMapUV);
+                    mapTexFolder.add(mapSettings, 'wrap', { Clamp: THREE.ClampToEdgeWrapping, Repeat: THREE.RepeatWrapping, Mirrored: THREE.MirroredRepeatWrapping }).name('包裹 U/V').onChange((val) => {
+                        forMat((m) => {
+                            const t = m.map;
+                            if (!t) return;
+                            t.wrapS = val;
+                            t.wrapT = val;
+                            t.needsUpdate = true;
+                        });
+                    });
+
+                    const brushedTexFolder = labelFolder.addFolder('拉丝贴图 (rough/bump 共用)');
+                    const brushedUV = {
+                        offsetX: lm0.roughnessMap ? lm0.roughnessMap.offset.x : 0,
+                        offsetY: lm0.roughnessMap ? lm0.roughnessMap.offset.y : 0,
+                        repeatX: lm0.roughnessMap ? lm0.roughnessMap.repeat.x : 1,
+                        repeatY: lm0.roughnessMap ? lm0.roughnessMap.repeat.y : 1
+                    };
+
+                    function applyBrushedUV() {
+                        forMat((m) => {
+                            const t = m.roughnessMap;
+                            if (!t) return;
+                            t.offset.set(brushedUV.offsetX, brushedUV.offsetY);
+                            t.repeat.set(brushedUV.repeatX, brushedUV.repeatY);
+                            t.needsUpdate = true;
+                        });
+                    }
+
+                    brushedTexFolder.add(brushedUV, 'offsetX', -2, 2).name('偏移 U').onChange(applyBrushedUV);
+                    brushedTexFolder.add(brushedUV, 'offsetY', -2, 2).name('偏移 V').onChange(applyBrushedUV);
+                    brushedTexFolder.add(brushedUV, 'repeatX', 0.05, 8).name('平铺 U').onChange(applyBrushedUV);
+                    brushedTexFolder.add(brushedUV, 'repeatY', 0.05, 8).name('平铺 V').onChange(applyBrushedUV);
+
+                    meshList.forEach((mesh) => {
+                        const mat = mesh.material;
+                        if (mat && mat.roughnessMap) {
+                            brushedTexFolder.add(mat.roughnessMap, 'rotation', -Math.PI, Math.PI)
+                                .name(`拉丝独立旋转 (${mesh.name})`)
+                                .onChange(() => { mat.roughnessMap.needsUpdate = true; });
+                        }
+                    });
+                }
+
+                addExternalLabelGui(modelParts.label1, '外部标签 ① (biaoqian1)');
+                addExternalLabelGui(modelParts.label2, '外部标签 ② (biaoqian1_2)');
 
                 // ==========================================
                 // 部件显示控制 UI (Parts Visibility)
@@ -568,7 +824,8 @@
                     showGlass: true,
                     showRubber: true,
                     showPowder: true,
-                    showLabel: true
+                    showLabel1: true,
+                    showLabel2: true
                 };
 
                 visFolder.add(visSettings, 'showCap').name('金属盖子 (Cap)').onChange((val) => {
@@ -583,66 +840,208 @@
                 visFolder.add(visSettings, 'showPowder').name('内部粉末 (Powder)').onChange((val) => {
                     modelParts.powder.forEach(mesh => mesh.visible = val);
                 });
-                visFolder.add(visSettings, 'showLabel').name('外部标签 (Label)').onChange((val) => {
-                    modelParts.label.forEach(mesh => mesh.visible = val);
+                visFolder.add(visSettings, 'showLabel1').name('外部标签 ① (biaoqian1)').onChange((val) => {
+                    modelParts.label1.forEach(mesh => mesh.visible = val);
                 });
+                visFolder.add(visSettings, 'showLabel2').name('外部标签 ② (biaoqian1_2)').onChange((val) => {
+                    modelParts.label2.forEach(mesh => mesh.visible = val);
+                });
+                */
 
                 // 添加一个底部极简阴影捕捉平面，增强落地感和质感
                 const planeGeometry = new THREE.PlaneGeometry(20, 20);
                 const shadowMaterial = new THREE.ShadowMaterial({ opacity: 0.05 });
                 const shadowPlane = new THREE.Mesh(planeGeometry, shadowMaterial);
                 shadowPlane.rotation.x = -Math.PI / 2;
-                // 将平面置于模型最底部
-                shadowPlane.position.y = (-center.y * scale) - (size.y * scale / 2);
+                shadowPlane.position.y = shadowGroundY;
                 shadowPlane.receiveShadow = true;
                 scene.add(shadowPlane);
 
-                scene.add(model);
-                
-                // 入场动画：单次连续的平滑弧线 (从左到中间，不中断)
-                const tl = gsap.timeline();
-                
-                // 黑科技：配置 SVG 动态模糊滤镜代理对象
-                const blurFilter = document.getElementById('blur-filter');
-                renderer.domElement.style.filter = 'url(#motion-blur)';
-                const blurParams = { x: 15, y: 3 }; // 初始水平方向模糊较大，垂直方向略小
-                
-                // 模糊强度衰减动画
-                tl.to(blurParams, {
-                    x: 0,
-                    y: 0,
-                    duration: 1.5,
-                    ease: "power3.out",
-                    onUpdate: () => {
-                        blurFilter.setAttribute('stdDeviation', `${blurParams.x} ${blurParams.y}`);
-                    },
-                    onComplete: () => {
-                        // 动画结束移除滤镜，恢复极致清晰度
-                        renderer.domElement.style.filter = 'none';
-                    }
-                }, 0);
+                scene.add(modelPivot);
 
-                // 为了防止模型在狭窄的右侧容器中被 clip (裁切)，我们将 X 轴的移动速度调得比 Z 轴更快
-                // 这使得模型在远离镜头 (视野较宽) 时迅速滑向中心，然后在靠近中心时再缓慢拉近 (视野变窄)，形成一条完美的防裁切 C 型弧线
-                tl.to(model.position, {
-                    x: targetX,
-                    duration: 2.2,
-                    ease: "power4.out" // 横向快速归中，避免超出容器左侧边界
-                }, 0)
-                .to(model.position, {
-                    z: targetZ,
-                    y: targetY,
-                    duration: 2.2,
-                    ease: "power2.out" // 深度缓慢拉近，确保横向已经归中时才放大
-                }, 0)
-                // 优雅的回旋归正
-                .to(model.rotation, {
-                    x: 0,
-                    y: 0,
-                    z: 0,
-                    duration: 2.5,
-                    ease: "power3.out"
-                }, 0);
+                // 滚轮：向下 = 入场；向上 = 回到入场前（屏外 + 初始旋转）。动画中忽略新的滚轮。
+                const entranceDur = 1.5;
+                /** 与入场一致：水平为主、略垂直；退场仅在尾段使用同样衰减 */
+                const BLUR_MAX = { x: 34, y: 7 };
+                /** 向上退场：前段时长比例内保持无模糊，后段再套用与入场相同的模糊衰减 */
+                const EXIT_BLUR_DELAY_RATIO = 0.45;
+                const entranceRot = {
+                    x: THREE.MathUtils.degToRad(180),
+                    y: THREE.MathUtils.degToRad(-80),
+                    z: THREE.MathUtils.degToRad(154)
+                };
+                let entered = false;
+                let entranceAnimating = false;
+                let entranceTl = null;
+
+                controls.enabled = false;
+                if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
+
+                function killEntranceTimeline() {
+                    if (entranceTl) {
+                        entranceTl.kill();
+                        entranceTl = null;
+                    }
+                    gsap.killTweensOf(modelPivot.position);
+                    gsap.killTweensOf(modelPivot.rotation);
+                    renderer.domElement.style.filter = 'none';
+                }
+
+                function bindMotionBlurEnterTimeline(tl, blurParams, blurFilter) {
+                    renderer.domElement.style.filter = 'url(#motion-blur)';
+                    blurParams.x = BLUR_MAX.x;
+                    blurParams.y = BLUR_MAX.y;
+                    tl.to(blurParams, {
+                        x: 0,
+                        y: 0,
+                        duration: entranceDur,
+                        ease: 'power2.out',
+                        onUpdate: () => {
+                            blurFilter.setAttribute('stdDeviation', `${blurParams.x} ${blurParams.y}`);
+                        },
+                        onComplete: () => {
+                            renderer.domElement.style.filter = 'none';
+                        }
+                    }, 0);
+                }
+
+                function bindMotionBlurExitTimeline(tl, blurParams, blurFilter) {
+                    // 前段完全不挂 SVG 滤镜（避免 stdDeviation 0 仍带轻微糊感），到点后再用与入场相同的 BLUR_MAX → 0
+                    blurParams.x = 0;
+                    blurParams.y = 0;
+                    renderer.domElement.style.filter = 'none';
+                    const delay = entranceDur * EXIT_BLUR_DELAY_RATIO;
+                    const blurTail = entranceDur - delay;
+
+                    tl.call(() => {
+                        renderer.domElement.style.filter = 'url(#motion-blur)';
+                        blurParams.x = BLUR_MAX.x;
+                        blurParams.y = BLUR_MAX.y;
+                        blurFilter.setAttribute('stdDeviation', `${BLUR_MAX.x} ${BLUR_MAX.y}`);
+                    }, null, delay);
+
+                    tl.to(
+                        blurParams,
+                        {
+                            x: 0,
+                            y: 0,
+                            duration: blurTail,
+                            ease: 'power2.out',
+                            onUpdate: () => {
+                                blurFilter.setAttribute('stdDeviation', `${blurParams.x} ${blurParams.y}`);
+                            },
+                            onComplete: () => {
+                                renderer.domElement.style.filter = 'none';
+                            }
+                        },
+                        delay
+                    );
+                }
+
+                function runEntranceIn() {
+                    if (entered || entranceAnimating) return;
+                    entranceAnimating = true;
+                    killEntranceTimeline();
+                    controls.enabled = false;
+                    if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
+
+                    const blurFilter = document.getElementById('blur-filter');
+                    const blurParams = { x: BLUR_MAX.x, y: BLUR_MAX.y };
+                    entranceTl = gsap.timeline({
+                        onComplete: () => {
+                            entranceAnimating = false;
+                            entered = true;
+                            controls.enabled = true;
+                            if (window._autoRotateSettings) window._autoRotateSettings.enabled = true;
+                            entranceTl = null;
+                        }
+                    });
+                    bindMotionBlurEnterTimeline(entranceTl, blurParams, blurFilter);
+                    entranceTl.to(modelPivot.position, {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        duration: entranceDur,
+                        ease: 'power2.inOut'
+                    }, 0);
+                    entranceTl.to(modelPivot.rotation, {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        duration: entranceDur,
+                        ease: 'power2.inOut'
+                    }, 0);
+                }
+
+                function runEntranceOut() {
+                    if (!entered || entranceAnimating) return;
+                    entranceAnimating = true;
+                    killEntranceTimeline();
+                    controls.enabled = false;
+                    if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
+
+                    const blurFilter = document.getElementById('blur-filter');
+                    const blurParams = { x: 0, y: 0 };
+                    entranceTl = gsap.timeline({
+                        onComplete: () => {
+                            entranceAnimating = false;
+                            entered = false;
+                            entranceTl = null;
+                        }
+                    });
+                    bindMotionBlurExitTimeline(entranceTl, blurParams, blurFilter);
+                    entranceTl.to(modelPivot.position, {
+                        x: startX,
+                        y: 0,
+                        z: 0,
+                        duration: entranceDur,
+                        ease: 'power2.inOut'
+                    }, 0);
+                    entranceTl.to(modelPivot.rotation, {
+                        x: entranceRot.x,
+                        y: entranceRot.y,
+                        z: entranceRot.z,
+                        duration: entranceDur,
+                        ease: 'power2.inOut'
+                    }, 0);
+                }
+
+                function onWheelEntranceGate(e) {
+                    if (entranceAnimating) {
+                        e.preventDefault();
+                        return;
+                    }
+                    if (!entered && e.deltaY > 0) {
+                        e.preventDefault();
+                        runEntranceIn();
+                    } else if (entered && e.deltaY < 0) {
+                        e.preventDefault();
+                        runEntranceOut();
+                    }
+                }
+                window.addEventListener('wheel', onWheelEntranceGate, { passive: false });
+
+                // HDRI 上下旋转动画：营造光线在模型上扫过的质感
+                // 从 -Math.PI 到 Math.PI (360度完整旋转)，首尾相接，持续匀速循环扫描
+                scene.environmentRotation.x = -Math.PI;
+                gsap.to(scene.environmentRotation, {
+                    x: Math.PI,
+                    duration: 16.0, // 扫完一整圈的时长，放慢显得更有质感
+                    ease: "none", // 必须改为匀速 (none/linear)，这样循环重新开始时速度才不会有卡顿感
+                    repeat: -1, // 无限循环
+                    yoyo: false, // 取消钟摆式的来回，只朝一个方向转，转满一圈后自动跳回 -Math.PI 继续
+                    onUpdate: () => {
+                        // 同步更新UI
+                        if (envSettings && gui) {
+                            envSettings.rotationX = scene.environmentRotation.x;
+                            // 让 UI 控件显示也跟着动
+                            const controllers = gui.controllersRecursive();
+                            controllers.forEach(c => {
+                                if (c.property === 'rotationX') c.updateDisplay();
+                            });
+                        }
+                    }
+                });
                 
                 // 隐藏加载UI
                 const loading = document.getElementById('loading');
@@ -669,8 +1068,21 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            // 控制器更新，包括阻尼和平滑自动旋转
+            // 控制器更新，包括阻尼
             controls.update();
+
+            // 自行实现的 autoRotate：如果开启且用户没有在拖拽也没有在自动复位中
+            if (window._autoRotateSettings && window._autoRotateSettings.enabled && !window._autoRotateSettings.isDragging() && !window._autoRotateSettings.isResetting()) {
+                // TrackballControls 下，我们可以通过基于相机 up 轴旋转 position 和 up 来实现模型旋转的错觉
+                // autoRotateSpeed 保持和 OrbitControls 一致的行为感觉 (-0.8 代表每帧较慢的旋转)
+                const speed = window._autoRotateSettings.speed * 0.002;
+                
+                // 绕着 Y 轴旋转相机
+                const axis = new THREE.Vector3(0, 1, 0);
+                camera.position.applyAxisAngle(axis, speed);
+                camera.up.applyAxisAngle(axis, speed);
+            }
+
             renderer.render(scene, camera);
         }
     </script>
