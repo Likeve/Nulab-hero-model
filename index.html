@@ -859,17 +859,9 @@
 
                 scene.add(modelPivot);
 
-                // 滚轮：向下 = 入场；向上 = 回到入场前（屏外 + 初始旋转）。动画中忽略新的滚轮。
+                // 滚轮：仅向下触发入场；已入场后不再响应向上滚（无退场）。
                 const entranceDur = 1.5;
-                /** 与入场一致：水平为主、略垂直；退场仅在尾段使用同样衰减 */
                 const BLUR_MAX = { x: 34, y: 7 };
-                /** 向上退场：前段时长比例内保持无模糊，后段再套用与入场相同的模糊衰减 */
-                const EXIT_BLUR_DELAY_RATIO = 0.45;
-                const entranceRot = {
-                    x: THREE.MathUtils.degToRad(180),
-                    y: THREE.MathUtils.degToRad(-80),
-                    z: THREE.MathUtils.degToRad(154)
-                };
                 let entered = false;
                 let entranceAnimating = false;
                 let entranceTl = null;
@@ -903,39 +895,6 @@
                             renderer.domElement.style.filter = 'none';
                         }
                     }, 0);
-                }
-
-                function bindMotionBlurExitTimeline(tl, blurParams, blurFilter) {
-                    // 前段完全不挂 SVG 滤镜（避免 stdDeviation 0 仍带轻微糊感），到点后再用与入场相同的 BLUR_MAX → 0
-                    blurParams.x = 0;
-                    blurParams.y = 0;
-                    renderer.domElement.style.filter = 'none';
-                    const delay = entranceDur * EXIT_BLUR_DELAY_RATIO;
-                    const blurTail = entranceDur - delay;
-
-                    tl.call(() => {
-                        renderer.domElement.style.filter = 'url(#motion-blur)';
-                        blurParams.x = BLUR_MAX.x;
-                        blurParams.y = BLUR_MAX.y;
-                        blurFilter.setAttribute('stdDeviation', `${BLUR_MAX.x} ${BLUR_MAX.y}`);
-                    }, null, delay);
-
-                    tl.to(
-                        blurParams,
-                        {
-                            x: 0,
-                            y: 0,
-                            duration: blurTail,
-                            ease: 'power2.out',
-                            onUpdate: () => {
-                                blurFilter.setAttribute('stdDeviation', `${blurParams.x} ${blurParams.y}`);
-                            },
-                            onComplete: () => {
-                                renderer.domElement.style.filter = 'none';
-                            }
-                        },
-                        delay
-                    );
                 }
 
                 function runEntranceIn() {
@@ -973,39 +932,6 @@
                     }, 0);
                 }
 
-                function runEntranceOut() {
-                    if (!entered || entranceAnimating) return;
-                    entranceAnimating = true;
-                    killEntranceTimeline();
-                    controls.enabled = false;
-                    if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
-
-                    const blurFilter = document.getElementById('blur-filter');
-                    const blurParams = { x: 0, y: 0 };
-                    entranceTl = gsap.timeline({
-                        onComplete: () => {
-                            entranceAnimating = false;
-                            entered = false;
-                            entranceTl = null;
-                        }
-                    });
-                    bindMotionBlurExitTimeline(entranceTl, blurParams, blurFilter);
-                    entranceTl.to(modelPivot.position, {
-                        x: startX,
-                        y: 0,
-                        z: 0,
-                        duration: entranceDur,
-                        ease: 'power2.inOut'
-                    }, 0);
-                    entranceTl.to(modelPivot.rotation, {
-                        x: entranceRot.x,
-                        y: entranceRot.y,
-                        z: entranceRot.z,
-                        duration: entranceDur,
-                        ease: 'power2.inOut'
-                    }, 0);
-                }
-
                 function onWheelEntranceGate(e) {
                     if (entranceAnimating) {
                         e.preventDefault();
@@ -1014,9 +940,6 @@
                     if (!entered && e.deltaY > 0) {
                         e.preventDefault();
                         runEntranceIn();
-                    } else if (entered && e.deltaY < 0) {
-                        e.preventDefault();
-                        runEntranceOut();
                     }
                 }
                 window.addEventListener('wheel', onWheelEntranceGate, { passive: false });
