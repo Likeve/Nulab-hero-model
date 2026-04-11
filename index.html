@@ -41,17 +41,46 @@
         #canvas-container:active {
             cursor: grabbing;
         }
+        /* 模型加载前：全屏深灰底 + 浅灰进度条（pointer-events:none 便于嵌入页滚轮穿透） */
         #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 12px;
-            letter-spacing: 3px;
-            color: #ffffff; /* Dark Mode 下改为纯白 */
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #262626;
+            transition: opacity 0.45s ease;
+            pointer-events: none;
+        }
+        #loading.is-hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .loading-inner {
+            width: min(320px, 72vw);
+            text-align: center;
+        }
+        .loading-bar-track {
+            width: 100%;
+            height: 4px;
+            border-radius: 2px;
+            background: #3d3d3d;
+            overflow: hidden;
+        }
+        .loading-bar-fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 2px;
+            background: #c4c4c4;
+            transition: width 0.12s ease-out;
+        }
+        .loading-caption {
+            margin: 14px 0 0;
+            font-size: 11px;
+            letter-spacing: 0.28em;
             text-transform: uppercase;
-            transition: opacity 0.5s ease;
-            z-index: 20;
+            color: #8a8a8a;
         }
 
         /* 响应式：小屏仍占满视口 */
@@ -73,8 +102,15 @@
         </defs>
     </svg>
 
-    <div id="loading"></div>
     <div class="hero-section">
+        <div id="loading" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="加载 3D 模型">
+            <div class="loading-inner">
+                <div class="loading-bar-track">
+                    <div class="loading-bar-fill" id="loading-bar-fill"></div>
+                </div>
+                <p class="loading-caption" id="loading-caption">Loading</p>
+            </div>
+        </div>
         <div id="canvas-container"></div>
     </div>
 
@@ -550,6 +586,25 @@
             */
 
             // 7. 加载模型（xilingping999 使用 Draco 网格压缩时需 DRACOLoader）
+            const loadingOverlay = document.getElementById('loading');
+            const loadingFillEl = document.getElementById('loading-bar-fill');
+            function setModelLoadingProgress(pct) {
+                const v = Math.max(0, Math.min(100, pct));
+                if (loadingFillEl) loadingFillEl.style.width = v + '%';
+                if (loadingOverlay) loadingOverlay.setAttribute('aria-valuenow', String(Math.round(v)));
+            }
+            function onModelLoadProgress(e) {
+                const loaded = e.loaded != null ? e.loaded : 0;
+                const total = e.total != null ? e.total : 0;
+                if (total > 0) {
+                    setModelLoadingProgress((100 * loaded) / total);
+                } else if (loaded > 0) {
+                    const approx = Math.min(85, 10 + 75 * (1 - 1 / (1 + loaded / (1.5 * 1024 * 1024))));
+                    setModelLoadingProgress(approx);
+                }
+            }
+            setModelLoadingProgress(0);
+
             const dracoLoader = new DRACOLoader();
             dracoLoader.setDecoderPath(DRACO_DECODER_BASE);
             const loader = new GLTFLoader();
@@ -1037,18 +1092,20 @@
                     }
                 });
                 
-                // 隐藏加载UI
-                const loading = document.getElementById('loading');
-                if (loading) {
-                    loading.style.opacity = '0';
-                    setTimeout(() => loading.style.display = 'none', 500);
+                setModelLoadingProgress(100);
+                if (loadingOverlay) {
+                    loadingOverlay.classList.add('is-hidden');
+                    setTimeout(() => {
+                        loadingOverlay.style.display = 'none';
+                    }, 500);
                 }
 
-            }, undefined, function (error) {
+            }, onModelLoadProgress, function (error) {
                 console.error(error);
                 dracoLoader.dispose();
-                const loading = document.getElementById('loading');
-                if (loading) loading.innerText = ''; // 去除错误时的文字提示
+                const cap = document.getElementById('loading-caption');
+                if (cap) cap.textContent = 'Load failed';
+                if (loadingFillEl) loadingFillEl.style.background = '#8a5a5a';
             });
 
             window.addEventListener('resize', onWindowResize);
