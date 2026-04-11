@@ -41,7 +41,7 @@
         #canvas-container:active {
             cursor: grabbing;
         }
-        /* 模型加载前：全屏深灰底 + 浅灰进度条（pointer-events:none 便于嵌入页滚轮穿透） */
+        /* 模型加载前：全屏纯黑遮罩 + 浅灰进度条（pointer-events:none 便于嵌入页滚轮穿透） */
         #loading {
             position: fixed;
             inset: 0;
@@ -49,7 +49,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #262626;
+            background: #000000;
             transition: opacity 0.45s ease;
             pointer-events: none;
         }
@@ -65,7 +65,7 @@
             width: 100%;
             height: 4px;
             border-radius: 2px;
-            background: #3d3d3d;
+            background: #333333;
             overflow: hidden;
         }
         .loading-bar-fill {
