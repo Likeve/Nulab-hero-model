@@ -642,7 +642,11 @@
                 const box = new THREE.Box3().setFromObject(model);
                 const size = box.getSize(new THREE.Vector3());
                 const maxDim = Math.max(size.x, size.y, size.z);
-                const scale = 3.2 / maxDim; // 调整最佳视觉缩放比例
+                
+                // 根据屏幕宽度调整模型大小（断点 390 / 810）
+                const w = window.innerWidth;
+                const targetDim = w <= 390 ? 1.8 : w <= 810 ? 2.6 : 3.2;
+                const scale = targetDim / maxDim; // 调整最佳视觉缩放比例
                 
                 model.scale.setScalar(scale);
 
