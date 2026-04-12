@@ -362,6 +362,39 @@
 
         let camera, scene, renderer, controls;
 
+        // 全局滚动拦截（确保在整个模型加载和交互期间锁定父页面滚动，除非交互完成）
+        window._isModelLoaded = false;
+        window._handleVirtualScroll = null;
+
+        // 监听鼠标滚轮 (放在最外层，确保页面一加载就开始拦截)
+        window.addEventListener('wheel', (e) => {
+            if (!window._isModelLoaded) {
+                // 加载未完成时，拦截向下滚动，强制锁定在当前 iframe 区域不让其向下划走
+                if (e.deltaY > 0) e.preventDefault();
+            } else if (window._handleVirtualScroll) {
+                // 加载完成后，交由时间轴拦截逻辑处理
+                window._handleVirtualScroll(e, e.deltaY, 'wheel');
+            }
+        }, { passive: false });
+
+        // 监听触控滑动 (Mobile)
+        let globalLastTouchY = 0;
+        window.addEventListener('touchstart', (e) => {
+            globalLastTouchY = e.touches[0].clientY;
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+            const currentY = e.touches[0].clientY;
+            const deltaY = globalLastTouchY - currentY;
+            globalLastTouchY = currentY;
+
+            if (!window._isModelLoaded) {
+                if (deltaY > 0) e.preventDefault();
+            } else if (window._handleVirtualScroll) {
+                window._handleVirtualScroll(e, deltaY, 'touch');
+            }
+        }, { passive: false });
+
         init();
         animate();
 
@@ -1264,32 +1297,17 @@
                     });
                 }
 
-                // 监听鼠标滚轮
-                window.addEventListener('wheel', (e) => {
-                    // 当动画未走完时，拦截滚动事件，防止页面默认滚动
-                    if ((e.deltaY > 0 && scrollProgress < 1) || (e.deltaY < 0 && scrollProgress > 0)) {
-                        e.preventDefault(); 
-                        updateTimelineProgress(scrollProgress + e.deltaY * scrollSensitivity);
-                    }
-                    // 当达到边界时（0 或 1），不调用 preventDefault()，允许父页面(Framer)自然滚动
-                }, { passive: false });
-
-                // 监听触控滑动 (Mobile)
-                let lastTouchY = 0;
-                window.addEventListener('touchstart', (e) => {
-                    lastTouchY = e.touches[0].clientY;
-                }, { passive: true });
-
-                window.addEventListener('touchmove', (e) => {
-                    const currentY = e.touches[0].clientY;
-                    const deltaY = lastTouchY - currentY;
-                    lastTouchY = currentY;
-
+                // 赋值给全局拦截器
+                window._handleVirtualScroll = (e, deltaY, type) => {
                     if ((deltaY > 0 && scrollProgress < 1) || (deltaY < 0 && scrollProgress > 0)) {
                         e.preventDefault();
-                        updateTimelineProgress(scrollProgress + deltaY * touchSensitivity);
+                        const sensitivity = type === 'wheel' ? scrollSensitivity : touchSensitivity;
+                        updateTimelineProgress(scrollProgress + deltaY * sensitivity);
                     }
-                }, { passive: false });
+                };
+
+                // 标记加载完成，放开对加载期的硬拦截，交由 window._handleVirtualScroll 接管进度逻辑
+                window._isModelLoaded = true;
                 // ==============================================================
 
                 // HDRI 上下旋转动画：营造光线在模型上扫过的质感
