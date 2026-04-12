@@ -1293,7 +1293,8 @@
                     gsap.to(entranceTl, {
                         progress: scrollProgress,
                         duration: 0.8,
-                        ease: 'power2.out'
+                        ease: 'power2.out',
+                        overwrite: true // 极其关键：迅速滑屏时，确保打断旧的 progress tween，防止动画打架卡死
                     });
                 }
 
