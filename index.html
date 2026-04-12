@@ -367,15 +367,15 @@
         window._isIframeFullyVisible = false; // 新增：是否完全在父页面可见
         window._handleVirtualScroll = null;
 
-        // 监听跨域 iframe 的可见度，只有当 iframe 完全出现在视口中时，才拦截滚动
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                // 考虑到计算误差，>= 0.95 即认为 iframe 几乎完全占据了视口
-                window._isIframeFullyVisible = entry.intersectionRatio >= 0.95;
+            // 监听跨域 iframe 的可见度，只有当 iframe 完全出现在视口中时，才拦截滚动
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    // 考虑到计算误差和移动端浏览器地址栏的高度变化，>= 0.85 即可认为处于主视觉区
+                    window._isIframeFullyVisible = entry.intersectionRatio >= 0.85;
+                });
+            }, {
+                threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1]
             });
-        }, {
-            threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98, 1]
-        });
         // 观察 html 元素（代表整个 iframe 的尺寸）
         observer.observe(document.documentElement);
 
@@ -556,11 +556,15 @@
                 }
             }, { capture: true });
 
-            renderer.domElement.addEventListener('pointerup', (e) => {
+            const resetSwipeState = (e) => {
                 if (e.pointerType === 'touch') {
                     window._isHorizontalSwipe = false;
                 }
-            }, { capture: true });
+            };
+            renderer.domElement.addEventListener('pointerup', resetSwipeState, { capture: true });
+            renderer.domElement.addEventListener('pointercancel', resetSwipeState, { capture: true });
+            renderer.domElement.addEventListener('pointerout', resetSwipeState, { capture: true });
+            renderer.domElement.addEventListener('pointerleave', resetSwipeState, { capture: true });
             // ==============================================================
 
             controls.addEventListener('start', () => { 
