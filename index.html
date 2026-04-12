@@ -7,6 +7,15 @@
     <style>
         html {
             background: transparent;
+            /* 设定足够的 min-height，让页面能慢慢往下滚动来驱动 3D 动画 */
+            min-height: 600vh;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        html::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
         }
         body {
             margin: 0;
@@ -15,6 +24,13 @@
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             user-select: none;
             -webkit-user-select: none;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+        body::-webkit-scrollbar {
+            display: none;
+            width: 0;
+            height: 0;
         }
         .hero-section {
             width: 100%;
@@ -27,8 +43,11 @@
             height: 100vh;
             padding: 0;
             box-sizing: border-box;
-            position: relative;
+            position: fixed; /* 固定画布，让滚动仅用来驱动时间轴 */
+            top: 0;
+            left: 0;
             background: transparent;
+            z-index: 0;
         }
         #canvas-container {
             width: 100%;
@@ -117,15 +136,6 @@
     </style>
 </head>
 <body>
-    <!-- 入场阶段画布 CSS 动态模糊（feGaussianBlur，随 GSAP 淡出） -->
-    <svg xmlns="http://www.w3.org/2000/svg" style="width:0;height:0;position:absolute;" aria-hidden="true">
-        <defs>
-            <filter id="motion-blur" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur id="blur-filter" in="SourceGraphic" stdDeviation="0 0" />
-            </filter>
-        </defs>
-    </svg>
-
     <div class="hero-section">
         <div id="loading" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="加载 3D 模型">
             <div class="loading-inner">
@@ -138,8 +148,9 @@
         <div id="canvas-container"></div>
     </div>
 
-    <!-- 引入 GSAP 动画库 -->
+    <!-- 引入 GSAP 动画库及 ScrollTrigger -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
     
     <!-- 引入 lil-gui 用于控制参数 -->
     <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.umd.min.js"></script>
@@ -680,12 +691,15 @@
                         cameraDefaultRest.distanceTo(camOrigin) * POST_ENTRANCE_ZOOM_FROM_FACTOR
                     )
                 );
-                camera.position.copy(cameraFarIntro);
+                // 始终把相机固定在默认距离，方便用户随时可以旋转交互！
+                // 将拉远的视觉效果改为通过 modelPivot 缩放（scale）实现
+                camera.position.copy(cameraDefaultRest);
                 camera.lookAt(0, 0, 0);
                 controls.update();
 
-                // 将屏幕水平像素偏移换算为近似世界坐标 X（透视相机、看向原点；此时已为远景机位）
-                const camDist = camera.position.length();
+                // 将屏幕水平像素偏移换算为近似世界坐标 X
+                // 这里用 cameraFarIntro 计算 frustum 以保持原本从画面最左侧完美滑入的体验
+                const camDist = cameraFarIntro.length();
                 const frustumH = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5) * camDist;
                 const frustumW = frustumH * camera.aspect;
                 const pxToWorldX = (px) => (px / container.clientWidth) * frustumW;
@@ -990,158 +1004,75 @@
 
                 scene.add(modelPivot);
 
-                // 滚轮：仅向下触发入场；已入场后不再响应向上滚（无退场）。
-                const BLUR_MAX = { x: 34, y: 7 };
-                let entered = false;
-                let entranceAnimating = false;
-                let entranceTl = null;
-                let postEntranceZooming = false;
+                // -------------------------------------------------------------
+                // 使用 GSAP ScrollTrigger 将入场动画与页面滚动深度绑定
+                // -------------------------------------------------------------
+                gsap.registerPlugin(ScrollTrigger);
 
-                controls.enabled = false;
+                // 控制权从一开始就是开启的，你可以随时随地任意角度拖拽模型！
+                controls.enabled = true;
                 if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
 
-                function killEntranceTimeline() {
-                    if (entranceTl) {
-                        entranceTl.kill();
-                        entranceTl = null;
-                    }
-                    postEntranceZooming = false;
-                    gsap.killTweensOf(modelPivot.position);
-                    gsap.killTweensOf(modelPivot.rotation);
-                    gsap.killTweensOf(camera.position);
-                    renderer.domElement.style.filter = 'none';
-                }
+                // 初始化状态
+                // 用模型初始缩小（scale），在视觉上达到和 cameraFarIntro 一样的效果，
+                // 以保证用户在任何时候旋转模型都不会影响动画！
+                const initialScale = 1 / POST_ENTRANCE_ZOOM_FROM_FACTOR;
+                modelPivot.scale.setScalar(initialScale);
+                
+                // 将相机始终放在默认距离，避免缩放冲突
+                camera.position.copy(cameraDefaultRest);
+                camera.lookAt(0, 0, 0);
+                controls.update();
 
-                function bindMotionBlurEnterTimeline(tl, blurParams, blurFilter) {
-                    renderer.domElement.style.filter = 'url(#motion-blur)';
-                    blurParams.x = BLUR_MAX.x;
-                    blurParams.y = BLUR_MAX.y;
-                    tl.to(blurParams, {
-                        x: 0,
-                        y: 0,
-                        duration: entranceDur,
-                        ease: 'power2.out',
-                        onUpdate: () => {
-                            blurFilter.setAttribute('stdDeviation', `${blurParams.x} ${blurParams.y}`);
-                        },
-                        onComplete: () => {
-                            renderer.domElement.style.filter = 'none';
-                        }
-                    }, 0);
-                }
-
-                function runEntranceIn() {
-                    if (entered || entranceAnimating) return;
-                    entranceAnimating = true;
-                    killEntranceTimeline();
-                    camera.position.copy(cameraFarIntro);
-                    camera.lookAt(0, 0, 0);
-                    controls.update();
-                    controls.enabled = false;
-                    if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
-
-                    const blurFilter = document.getElementById('blur-filter');
-                    const blurParams = { x: BLUR_MAX.x, y: BLUR_MAX.y };
-                    const zoomT0 = Math.max(0, entranceDur - ZOOM_LEAD);
-                    entranceTl = gsap.timeline({
-                        onComplete: () => {
-                            entranceAnimating = false;
-                            entered = true;
-                            postEntranceZooming = false;
-                            camera.position.copy(cameraDefaultRest);
-                            camera.lookAt(0, 0, 0);
-                            controls.enabled = true;
-                            entranceTl = null;
-                        }
-                    });
-                    bindMotionBlurEnterTimeline(entranceTl, blurParams, blurFilter);
-                    entranceTl.to(modelPivot.position, {
-                        x: 0,
-                        y: 0,
-                        z: 0,
-                        duration: entranceDur,
-                        ease: 'power2.inOut'
-                    }, 0);
-                    entranceTl.to(modelPivot.rotation, {
-                        x: MODEL_REST_ROT_X,
-                        y: MODEL_REST_ROT_Y,
-                        z: MODEL_REST_ROT_Z,
-                        duration: entranceDur,
-                        ease: 'power2.inOut'
-                    }, 0);
-                    entranceTl.to(
-                        camera.position,
-                        {
-                            x: cameraDefaultRest.x,
-                            y: cameraDefaultRest.y,
-                            z: cameraDefaultRest.z,
-                            duration: POST_ENTRANCE_ZOOM_DUR,
-                            ease: 'none',
-                            onStart: () => {
-                                postEntranceZooming = true;
-                                if (window._autoRotateSettings) window._autoRotateSettings.enabled = true;
-                            },
-                            onUpdate: () => {
-                                camera.lookAt(0, 0, 0);
+                // 创建基于滚动的入场动画 Timeline
+                // 滚动范围设为 "+=600%"，即向下滚 6 个屏幕高度才算完成
+                const entranceTl = gsap.timeline({
+                    scrollTrigger: {
+                        trigger: document.documentElement,
+                        start: "top top",
+                        end: "+=400%", // 滚动范围 400%，适中，不会显得太累
+                        scrub: 2.5, // 极强的高级阻尼感
+                        invalidateOnRefresh: true,
+                        onUpdate: (self) => {
+                            // zoom-in 阶段开始时（进度大于 0.4）启用自转
+                            if (window._autoRotateSettings) {
+                                window._autoRotateSettings.enabled = (self.progress > 0.4);
                             }
-                        },
-                        zoomT0
-                    );
-                }
+                        }
+                    }
+                });
 
-                function onWheelEntranceGate(e) {
-                    // 入场 / zoom 播放中不再 preventDefault：嵌入 Framer（iframe）时否则会吞掉整页滚动
-                    if (entranceAnimating || postEntranceZooming) {
-                        return;
-                    }
-                    // 仅首次向下滚触发动画时拦截，避免同一滚既入场又带动父级滚动一截
-                    if (!entered && e.deltaY > 0) {
-                        e.preventDefault();
-                        runEntranceIn();
-                    }
-                }
-                window.addEventListener('wheel', onWheelEntranceGate, { passive: false });
+                requestAnimationFrame(() => {
+                    if (typeof ScrollTrigger !== 'undefined') ScrollTrigger.refresh();
+                });
 
-                // 触屏：手指上移（等同「向下滚动」意图）触发入场，与桌面滚轮一致；阈值随 390 / 810 断点收紧
-                let touchGateStartY = null;
-                let touchGateStartX = null;
-                function touchSwipeThreshold() {
-                    const w = window.innerWidth;
-                    if (w <= 390) return 40;
-                    if (w <= 810) return 46;
-                    return 56;
-                }
-                function onTouchStartGate(e) {
-                    if (entranceAnimating || postEntranceZooming || entered) return;
-                    if (e.touches.length !== 1) return;
-                    touchGateStartY = e.touches[0].clientY;
-                    touchGateStartX = e.touches[0].clientX;
-                }
-                function onTouchEndGate(e) {
-                    if (entranceAnimating || postEntranceZooming || entered) return;
-                    if (touchGateStartY == null) return;
-                    if (e.changedTouches.length < 1) {
-                        touchGateStartY = null;
-                        touchGateStartX = null;
-                        return;
-                    }
-                    const t = e.changedTouches[0];
-                    const dy = touchGateStartY - t.clientY;
-                    const dx = Math.abs(t.clientX - touchGateStartX);
-                    touchGateStartY = null;
-                    touchGateStartX = null;
-                    const th = touchSwipeThreshold();
-                    if (dy > th && dy > dx * 0.55) {
-                        runEntranceIn();
-                    }
-                }
-                function onTouchCancelGate() {
-                    touchGateStartY = null;
-                    touchGateStartX = null;
-                }
-                window.addEventListener('touchstart', onTouchStartGate, { passive: true });
-                window.addEventListener('touchend', onTouchEndGate, { passive: true });
-                window.addEventListener('touchcancel', onTouchCancelGate, { passive: true });
+                // 模型从远处飞入中央并旋转到默认姿态
+                // 使用 power3.out 缓动曲线，让滚第一下时就有明显的速度飞入画面（解决滚两下才出现的脱节感），随后越滚越慢、越优雅。
+                entranceTl.to(modelPivot.position, {
+                    x: 0,
+                    y: 0,
+                    z: 0,
+                    duration: entranceDur,
+                    ease: 'power3.out'
+                }, 0);
+                
+                entranceTl.to(modelPivot.rotation, {
+                    x: MODEL_REST_ROT_X,
+                    y: MODEL_REST_ROT_Y,
+                    z: MODEL_REST_ROT_Z,
+                    duration: entranceDur,
+                    ease: 'power3.out'
+                }, 0);
+
+                // 模型放大 (模拟相机推进 zoom-in)
+                const zoomT0 = Math.max(0, entranceDur - ZOOM_LEAD);
+                entranceTl.to(modelPivot.scale, {
+                    x: 1.0,
+                    y: 1.0,
+                    z: 1.0,
+                    duration: POST_ENTRANCE_ZOOM_DUR,
+                    ease: 'none'
+                }, zoomT0);
 
                 // HDRI 上下旋转动画：营造光线在模型上扫过的质感
                 // 从 -Math.PI 到 Math.PI (360度完整旋转)，首尾相接，持续匀速循环扫描
@@ -1189,6 +1120,7 @@
             camera.aspect = container.clientWidth / container.clientHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(container.clientWidth, container.clientHeight);
+            if (typeof ScrollTrigger !== 'undefined') ScrollTrigger.refresh();
         }
 
         function animate() {
