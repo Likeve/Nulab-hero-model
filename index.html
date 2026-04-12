@@ -404,6 +404,9 @@
             const deltaY = globalLastTouchY - currentY;
             globalLastTouchY = currentY;
 
+            // 移动端：如果是左右横滑（旋转模型），禁止同时滚动时间轴
+            if (window._isHorizontalSwipe) return;
+
             // 如果 iframe 没有完全进入视口，【绝对不拦截】！
             if (!window._isIframeFullyVisible) return;
 
@@ -517,6 +520,48 @@
             let isResetting = false;
             let resetTweenPos = null;
             let resetTweenUp = null;
+
+            // === 移动端/触屏交互优化：严格分离【横向旋转模型】与【纵向滚动时间轴】 ===
+            let _pointerStartX = 0;
+            let _pointerStartY = 0;
+            let _gestureDirection = null; // 'horizontal' | 'vertical' | null
+            window._isHorizontalSwipe = false;
+
+            renderer.domElement.addEventListener('pointerdown', (e) => {
+                if (e.pointerType === 'touch') {
+                    _pointerStartX = e.clientX;
+                    _pointerStartY = e.clientY;
+                    _gestureDirection = null;
+                    window._isHorizontalSwipe = false;
+                }
+            }, { capture: true });
+
+            renderer.domElement.addEventListener('pointermove', (e) => {
+                if (e.pointerType === 'touch') {
+                    if (!_gestureDirection) {
+                        const dx = Math.abs(e.clientX - _pointerStartX);
+                        const dy = Math.abs(e.clientY - _pointerStartY);
+                        if (dx > 5 || dy > 5) {
+                            _gestureDirection = dx > dy ? 'horizontal' : 'vertical';
+                        }
+                    }
+                    
+                    if (_gestureDirection === 'vertical') {
+                        // 如果是上下滑（意图滚动），阻止 TrackballControls 获取事件，避免把模型转飞
+                        e.stopImmediatePropagation();
+                    } else if (_gestureDirection === 'horizontal') {
+                        // 如果是左右滑（意图旋转模型），通知外层拦截器不要滚动虚拟时间轴
+                        window._isHorizontalSwipe = true;
+                    }
+                }
+            }, { capture: true });
+
+            renderer.domElement.addEventListener('pointerup', (e) => {
+                if (e.pointerType === 'touch') {
+                    window._isHorizontalSwipe = false;
+                }
+            }, { capture: true });
+            // ==============================================================
 
             controls.addEventListener('start', () => { 
                 isDragging = true; 
