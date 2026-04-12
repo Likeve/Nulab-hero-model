@@ -6,9 +6,9 @@
     <title>3D 西林瓶 - 前卫生化质感</title>
     <style>
         html {
-            background: transparent;
-            /* 设定足够的 min-height，让页面能慢慢往下滚动来驱动 3D 动画 */
-            min-height: 600vh;
+            background: #000000;
+            /* 与 ScrollTrigger end 匹配：区间越长，单次滚动对应动画变化越小 */
+            min-height: 950vh;
             scrollbar-width: none;
             -ms-overflow-style: none;
         }
@@ -20,7 +20,7 @@
         body {
             margin: 0;
             overflow-x: hidden;
-            background: transparent; /* 与画布 alpha 一致，便于嵌入或透出下层页面 */
+            background: #000000;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             user-select: none;
             -webkit-user-select: none;
@@ -46,7 +46,7 @@
             position: fixed; /* 固定画布，让滚动仅用来驱动时间轴 */
             top: 0;
             left: 0;
-            background: transparent;
+            background: #000000;
             z-index: 0;
         }
         #canvas-container {
@@ -55,7 +55,7 @@
             max-width: 100%;
             position: relative;
             cursor: grab;
-            background: transparent;
+            background: #000000;
         }
         #canvas-container:active {
             cursor: grabbing;
@@ -102,6 +102,133 @@
             color: #8a8a8a;
         }
 
+        /* 前景文本信息 */
+        .about-section {
+            padding: 45vh 40px 680px; /* 让首个文本块直接位于第一屏的中间，底部增加 680px 留白 */
+            margin-top: 0;
+            background-color: transparent; /* 背景透明，透出固定在底部的 3D 模型 */
+            position: relative;
+            z-index: 10;
+            pointer-events: none; /* 允许鼠标穿透去拖拽背景里的 3D 模型 */
+            min-height: 100vh;
+        }
+
+        .section-main {
+            display: flex;
+            flex-direction: column; /* 上下布局 */
+            justify-content: flex-start;
+            gap: 400px;
+            max-width: 1380px;
+            margin: 0 auto;
+            opacity: 0;
+            transform: translateY(40px);
+            transition: opacity 1s cubic-bezier(0.2, 0.8, 0.2, 1), transform 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+            pointer-events: none; /* 改回 none，让所有的点击/拖拽穿透文字层，直接作用到底部的 3D 模型上 */
+        }
+
+        .section-main.is-visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* 上排 */
+        .text-group {
+            display: flex;
+            align-items: center; /* meta 与 tagline 垂直居中对齐 */
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .meta {
+            flex: 1; /* 填充剩余空间 */
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 128px;
+            color: #b0b0b0;
+        }
+
+        .meta h5 {
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .divider {
+            display: none; /* 左右排列后隐藏分割线 */
+        }
+
+        .tagline {
+            width: 320px;
+            flex-shrink: 0;
+            text-align: left;
+        }
+
+        .tagline h2 {
+            font-size: 54px;
+            margin: 0;
+            line-height: 1em;
+            letter-spacing: -0.03em;
+        }
+
+        .tagline .primary {
+            color: #fff;
+        }
+
+        .tagline .secondary {
+            color: #b0b0b0;
+        }
+
+        /* 下排 */
+        .content {
+            display: flex;
+            align-items: center; /* heading-stack 与 description 垂直居中对齐 */
+            justify-content: space-between;
+            width: 100%;
+        }
+
+        .heading-stack {
+            flex: 1; /* 填充剩余空间 */
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            color: #b0b0b0;
+        }
+
+        .heading-stack h5 {
+            font-size: 14px;
+            margin: 0;
+            letter-spacing: 0.1em;
+            line-height: 1;
+        }
+
+        .heading-stack .icon {
+            color: #ff5700;
+        }
+
+        .icon svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .description {
+            width: 320px;
+            flex-shrink: 0;
+            margin-top: 0;
+        }
+
+        .description h2 {
+            font-size: 54px;
+            margin: 0;
+            color: #b0b0b0;
+            line-height: 1em;
+            letter-spacing: -0.03em;
+            font-weight: 500;
+        }
+
+        .highlight {
+            color: #fff;
+        }
+
         /* 平板：≤810px */
         @media (max-width: 810px) {
             .hero-section {
@@ -133,6 +260,42 @@
                 margin-top: 12px;
             }
         }
+        @media (max-width: 810px) {
+            .about-section {
+                padding: 40vh 24px 680px;
+            }
+            .section-main {
+                flex-direction: column;
+                gap: 400px; /* 与桌面一致：上下两块文案间距 400px */
+            }
+            .text-group,
+            .content {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .meta {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0; /* Logo 与年份上下紧排，无额外间距 */
+            }
+            .text-group {
+                gap: 162px; /* meta 与 tagline 纵向间距 */
+            }
+            .content {
+                gap: 62px; /* heading-stack 与 description 纵向间距 */
+            }
+            .tagline, .description {
+                max-width: 320px;
+                width: 100%;
+                margin-top: 0;
+                align-self: flex-end; /* 列布局下整块靠右 */
+                text-align: right;
+            }
+            .tagline h2, .description h2 {
+                font-size: 32px;
+                text-align: right;
+            }
+        }
     </style>
 </head>
 <body>
@@ -147,6 +310,46 @@
         </div>
         <div id="canvas-container"></div>
     </div>
+
+    <section id="about-us" class="about-section">
+        <div class="section-main">
+            <!-- 上侧品牌信息块 -->
+            <div class="text-group">
+                <div class="meta">
+                    <h5 class="logo">Nu Labs®</h5>
+                    <h5 class="year">©2025</h5>
+                </div>
+
+                <div class="tagline">
+                    <h2>
+                        <span class="primary">// Empowered by AI.</span><br>
+                        <span class="secondary">Driven by Human Vision.</span>
+                    </h2>
+                </div>
+            </div>
+
+            <!-- 下侧内容 -->
+            <div class="content">
+                <div class="heading-stack">
+                    <div class="icon">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2"/>
+                        </svg>
+                    </div>
+                    <h5 class="heading-label">ABOUT US</h5>
+                </div>
+
+                <div class="description">
+                    <h2>
+                        We specialize in delivering digital products —
+                        <span class="highlight">
+                            intelligently optimized through AI.
+                        </span>
+                    </h2>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <!-- 引入 GSAP 动画库及 ScrollTrigger -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
@@ -180,6 +383,19 @@
 
         let camera, scene, renderer, controls;
 
+        // Scroll-Driven Reveal
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.1 });
+        
+        const sectionMain = document.querySelector('.section-main');
+        if (sectionMain) observer.observe(sectionMain);
+
         init();
         animate();
 
@@ -187,10 +403,10 @@
             const container = document.getElementById('canvas-container');
 
             // 1. 初始化渲染器
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(container.clientWidth, container.clientHeight);
-            renderer.setClearColor(0x000000, 0);
+            renderer.setClearColor(0x000000, 1);
             
             // 色调映射与曝光，营造高级摄影质感
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -200,14 +416,12 @@
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
             renderer.domElement.style.display = 'block';
-            renderer.domElement.style.background = 'transparent';
+            renderer.domElement.style.background = '#000000';
             container.appendChild(renderer.domElement);
 
             // 2. 场景设置
             scene = new THREE.Scene();
-            // null = 不绘制场景底色，配合 alpha:true + setClearColor(..., 0) 得到透明背景（嵌入 Framer/网页时透出下层）
-            // 若玻璃 Transmission 出现发雾/发白，可改回 scene.background = new THREE.Color(0x000000)
-            scene.background = null;
+            scene.background = new THREE.Color(0x000000);
             
             // 3. 相机设置 - 略带长焦感(35mm)，减少透视畸变，更显严谨和冷静
             camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 0.1, 100);
@@ -698,8 +912,9 @@
                 controls.update();
 
                 // 将屏幕水平像素偏移换算为近似世界坐标 X
-                // 这里用 cameraFarIntro 计算 frustum 以保持原本从画面最左侧完美滑入的体验
-                const camDist = cameraFarIntro.length();
+                // 注意：由于现在相机一直固定在默认距离 cameraDefaultRest，
+                // 模型在 z=0 平面的视锥体宽度应该根据真实的相机位置计算，才能确保刚好在屏幕边缘！
+                const camDist = camera.position.length();
                 const frustumH = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5) * camDist;
                 const frustumW = frustumH * camera.aspect;
                 const pxToWorldX = (px) => (px / container.clientWidth) * frustumW;
@@ -1025,13 +1240,13 @@
                 controls.update();
 
                 // 创建基于滚动的入场动画 Timeline
-                // 滚动范围设为 "+=600%"，即向下滚 6 个屏幕高度才算完成
+                // 拉长 end：同样滚轮行程下时间轴进度更小（更「细」、更慢）
                 const entranceTl = gsap.timeline({
                     scrollTrigger: {
                         trigger: document.documentElement,
                         start: "top top",
-                        end: "+=400%", // 滚动范围 400%，适中，不会显得太累
-                        scrub: 2.5, // 极强的高级阻尼感
+                        end: "+=800%",
+                        scrub: 3,
                         invalidateOnRefresh: true,
                         onUpdate: (self) => {
                             // zoom-in 阶段开始时（进度大于 0.4）启用自转
