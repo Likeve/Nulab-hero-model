@@ -7,30 +7,15 @@
     <style>
         html {
             background: #000000;
-            /* 与 ScrollTrigger end 匹配：区间越长，单次滚动对应动画变化越小 */
-            min-height: 950vh;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-        }
-        html::-webkit-scrollbar {
-            display: none;
-            width: 0;
-            height: 0;
+            overflow: hidden; /* 隐藏原生滚动条，采用虚拟滚动接管交互 */
         }
         body {
             margin: 0;
-            overflow-x: hidden;
+            overflow: hidden; /* 隐藏原生滚动条 */
             background: #000000;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             user-select: none;
             -webkit-user-select: none;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-        }
-        body::-webkit-scrollbar {
-            display: none;
-            width: 0;
-            height: 0;
         }
         .hero-section {
             width: 100%;
@@ -351,9 +336,8 @@
         </div>
     </section>
 
-    <!-- 引入 GSAP 动画库及 ScrollTrigger -->
+    <!-- 引入 GSAP 动画库 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
     
     <!-- 引入 lil-gui 用于控制参数 -->
     <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.umd.min.js"></script>
@@ -1220,49 +1204,27 @@
                 scene.add(modelPivot);
 
                 // -------------------------------------------------------------
-                // 使用 GSAP ScrollTrigger 将入场动画与页面滚动深度绑定
+                // 使用虚拟滚动 (Virtual Scroll) 驱动动画，专为 iframe/Framer Embed 优化
+                // 不依赖实际的 CSS scrollbar，避免了 iframe 内部出现不协调的滚动条
                 // -------------------------------------------------------------
-                gsap.registerPlugin(ScrollTrigger);
 
                 // 控制权从一开始就是开启的，你可以随时随地任意角度拖拽模型！
                 controls.enabled = true;
                 if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
 
                 // 初始化状态
-                // 用模型初始缩小（scale），在视觉上达到和 cameraFarIntro 一样的效果，
-                // 以保证用户在任何时候旋转模型都不会影响动画！
                 const initialScale = 1 / POST_ENTRANCE_ZOOM_FROM_FACTOR;
                 modelPivot.scale.setScalar(initialScale);
-                
-                // 将相机始终放在默认距离，避免缩放冲突
+
+                // 将相机始终放在默认距离
                 camera.position.copy(cameraDefaultRest);
                 camera.lookAt(0, 0, 0);
                 controls.update();
 
-                // 创建基于滚动的入场动画 Timeline
-                // 拉长 end：同样滚轮行程下时间轴进度更小（更「细」、更慢）
-                const entranceTl = gsap.timeline({
-                    scrollTrigger: {
-                        trigger: document.documentElement,
-                        start: "top top",
-                        end: "+=800%",
-                        scrub: 3,
-                        invalidateOnRefresh: true,
-                        onUpdate: (self) => {
-                            // zoom-in 阶段开始时（进度大于 0.4）启用自转
-                            if (window._autoRotateSettings) {
-                                window._autoRotateSettings.enabled = (self.progress > 0.4);
-                            }
-                        }
-                    }
-                });
-
-                requestAnimationFrame(() => {
-                    if (typeof ScrollTrigger !== 'undefined') ScrollTrigger.refresh();
-                });
+                // 创建入场动画 Timeline（初始暂停，由鼠标/触控驱动）
+                const entranceTl = gsap.timeline({ paused: true });
 
                 // 模型从远处飞入中央并旋转到默认姿态
-                // 使用 power3.out 缓动曲线，让滚第一下时就有明显的速度飞入画面（解决滚两下才出现的脱节感），随后越滚越慢、越优雅。
                 entranceTl.to(modelPivot.position, {
                     x: 0,
                     y: 0,
@@ -1270,7 +1232,7 @@
                     duration: entranceDur,
                     ease: 'power3.out'
                 }, 0);
-                
+
                 entranceTl.to(modelPivot.rotation, {
                     x: MODEL_REST_ROT_X,
                     y: MODEL_REST_ROT_Y,
@@ -1288,6 +1250,56 @@
                     duration: POST_ENTRANCE_ZOOM_DUR,
                     ease: 'none'
                 }, zoomT0);
+
+                // === 虚拟滚动事件拦截逻辑 ===
+                let scrollProgress = 0;
+                // 调整这两个参数可以改变滑动的“阻力”感觉，越小越需要滑动更多次才能看完动画
+                const scrollSensitivity = 0.0006; 
+                const touchSensitivity = 0.0015;
+
+                function updateTimelineProgress(newProgress) {
+                    scrollProgress = Math.max(0, Math.min(1, newProgress));
+                    
+                    // 动态控制自转：进度大于 0.4 时开启自转
+                    if (window._autoRotateSettings) {
+                        window._autoRotateSettings.enabled = (scrollProgress > 0.4);
+                    }
+                    
+                    // 利用 gsap 实现平滑的“跟随”感 (类似 scrub 效果)
+                    gsap.to(entranceTl, {
+                        progress: scrollProgress,
+                        duration: 0.8,
+                        ease: 'power2.out'
+                    });
+                }
+
+                // 监听鼠标滚轮
+                window.addEventListener('wheel', (e) => {
+                    // 当动画未走完时，拦截滚动事件，防止页面默认滚动
+                    if ((e.deltaY > 0 && scrollProgress < 1) || (e.deltaY < 0 && scrollProgress > 0)) {
+                        e.preventDefault(); 
+                        updateTimelineProgress(scrollProgress + e.deltaY * scrollSensitivity);
+                    }
+                    // 当达到边界时（0 或 1），不调用 preventDefault()，允许父页面(Framer)自然滚动
+                }, { passive: false });
+
+                // 监听触控滑动 (Mobile)
+                let lastTouchY = 0;
+                window.addEventListener('touchstart', (e) => {
+                    lastTouchY = e.touches[0].clientY;
+                }, { passive: true });
+
+                window.addEventListener('touchmove', (e) => {
+                    const currentY = e.touches[0].clientY;
+                    const deltaY = lastTouchY - currentY;
+                    lastTouchY = currentY;
+
+                    if ((deltaY > 0 && scrollProgress < 1) || (deltaY < 0 && scrollProgress > 0)) {
+                        e.preventDefault();
+                        updateTimelineProgress(scrollProgress + deltaY * touchSensitivity);
+                    }
+                }, { passive: false });
+                // ==============================================================
 
                 // HDRI 上下旋转动画：营造光线在模型上扫过的质感
                 // 从 -Math.PI 到 Math.PI (360度完整旋转)，首尾相接，持续匀速循环扫描
@@ -1335,7 +1347,6 @@
             camera.aspect = container.clientWidth / container.clientHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(container.clientWidth, container.clientHeight);
-            if (typeof ScrollTrigger !== 'undefined') ScrollTrigger.refresh();
         }
 
         function animate() {
