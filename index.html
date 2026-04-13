@@ -464,7 +464,10 @@
             if (!window._isModelLoaded) {
                 if (deltaY > 0) e.preventDefault();
             } else if (window._handleVirtualScroll) {
-                window._handleVirtualScroll(e, deltaY, 'touch');
+                const status = window._handleVirtualScroll(e, deltaY, 'touch');
+                if (status === 'locked') {
+                    window._currentTouchAbsorbed = true;
+                }
             }
         }, { passive: false });
 
