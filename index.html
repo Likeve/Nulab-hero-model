@@ -7,11 +7,10 @@
     <style>
         html {
             background: #000000;
-            overflow: hidden; /* 隐藏原生滚动条，采用虚拟滚动接管交互 */
+            /* 必须移除 overflow: hidden 才能彻底解放 iOS / Safari 的原生父级 Scroll Chaining 能力 */
         }
         body {
             margin: 0;
-            overflow: hidden; /* 隐藏原生滚动条 */
             background: #000000;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             user-select: none;
@@ -92,10 +91,11 @@
             padding: 45vh 40px 0; /* 让首个文本块直接位于第一屏的中间 */
             margin-top: 0;
             background-color: transparent; /* 背景透明，透出固定在底部的 3D 模型 */
-            position: absolute; /* 使用绝对定位，由虚拟滚动驱动 */
+            position: fixed; /* 极度关键：使用 fixed 剥离出文档流，确保内部内容溢出不会给 body 制造原生滚动条，进而妨碍父级 Scroll Chaining */
             top: 0;
             left: 0;
             width: 100%;
+            height: 100vh;
             box-sizing: border-box;
             z-index: 10;
             pointer-events: none; /* 允许鼠标穿透去拖拽背景里的 3D 模型 */
