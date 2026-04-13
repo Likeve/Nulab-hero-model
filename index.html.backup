@@ -1343,10 +1343,8 @@
                 camera.lookAt(0, 0, 0);
                 controls.update();
 
-                // 创建入场动画 Timeline（由外层 Framer Code Override 驱动）
+                // 创建入场动画 Timeline（初始暂停，由鼠标/触控驱动）
                 const entranceTl = gsap.timeline({ paused: true });
-                // 将时间轴暴露给全局，供 postMessage 接口调用
-                window._entranceTimeline = entranceTl;
 
                 // 模型从远处飞入中央并旋转到默认姿态
                 entranceTl.to(modelPivot.position, {
@@ -1438,12 +1436,9 @@
                     return 'passed';
                 };
 
-                // 标记加载完成，通知外层 Framer 模型已就绪
-                if (window.parent) {
-                    window.parent.postMessage({
-                        type: 'MODEL_LOADED'
-                    }, '*');
-                }
+                // 标记加载完成，放开对加载期的硬拦截，交由 window._handleVirtualScroll 接管进度逻辑
+                window._isModelLoaded = true;
+                window._updateTouchAction();
                 // ==============================================================
 
                 // HDRI 上下旋转动画：营造光线在模型上扫过的质感
