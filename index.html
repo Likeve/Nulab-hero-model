@@ -410,13 +410,6 @@
 
         // 监听鼠标滚轮 (放在最外层，确保页面一加载就开始拦截)
         window.addEventListener('wheel', (e) => {
-            // 只要有滚动发生在区域上，立即吸附至视口 100vh
-            if (!window._isIframeFullyVisible) {
-                try {
-                    document.body.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                } catch(err) {}
-            }
-
             // 如果 iframe 没有完全进入视口，【绝对不拦截】，放任外层 Framer 页面自然滚动！
             if (!window._isIframeFullyVisible) return;
 
@@ -434,13 +427,6 @@
         window.addEventListener('touchstart', (e) => {
             globalLastTouchY = e.touches[0].clientY;
             window._currentTouchAbsorbed = false; // 每次手指新碰到屏幕时，重置滑动锁
-            
-            // 只要手指触碰到这个 Embed 区域，立即尝试将其吸附到视口正中央（实现 100vh 完全霸屏）
-            if (!window._isIframeFullyVisible) {
-                try {
-                    document.body.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                } catch(err) {}
-            }
         }, { passive: true });
 
         window.addEventListener('touchmove', (e) => {
