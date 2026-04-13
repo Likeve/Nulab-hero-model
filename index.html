@@ -7,15 +7,38 @@
     <style>
         html {
             background: #000000;
-            overflow: hidden; /* 隐藏原生滚动条，采用虚拟滚动接管交互 */
+            overflow: hidden;
         }
         body {
             margin: 0;
-            overflow: hidden; /* 隐藏原生滚动条 */
+            overflow: hidden;
             background: #000000;
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             user-select: none;
             -webkit-user-select: none;
+        }
+
+        /* 纯透明原生滚动层，用于完美接管触控/滚轮事件并自动触发父页面 Scroll Chaining */
+        #scroll-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow-y: hidden; /* 加载时隐藏，加载完成后恢复 auto */
+            overflow-x: hidden;
+            z-index: 20;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            touch-action: pan-y pinch-zoom;
+        }
+        #scroll-container::-webkit-scrollbar {
+            display: none;
+        }
+        #scroll-spacer {
+            height: 800%; /* 控制滚动总时长 */
+            width: 100%;
+            pointer-events: none;
         }
         .hero-section {
             width: 100%;
@@ -279,6 +302,11 @@
     </style>
 </head>
 <body>
+    <!-- 引入原生虚拟滚动容器 -->
+    <div id="scroll-container">
+        <div id="scroll-spacer"></div>
+    </div>
+
     <div class="hero-section">
         <div id="loading" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="加载 3D 模型">
             <div class="loading-inner">
@@ -362,60 +390,8 @@
 
         let camera, scene, renderer, controls;
 
-        // 全局滚动拦截（确保在整个模型加载和交互期间锁定父页面滚动，除非交互完成）
+        // 加载状态标记
         window._isModelLoaded = false;
-        window._isIframeFullyVisible = false; // 新增：是否完全在父页面可见
-        window._handleVirtualScroll = null;
-
-            // 监听跨域 iframe 的可见度，只有当 iframe 完全出现在视口中时，才拦截滚动
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                // 考虑到计算误差和移动端浏览器地址栏的高度变化，>= 0.60 即可认为处于主视觉区
-                window._isIframeFullyVisible = entry.intersectionRatio >= 0.60;
-            });
-        }, {
-            threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 1]
-        });
-        // 观察 html 元素（代表整个 iframe 的尺寸）
-        observer.observe(document.documentElement);
-
-        // 监听鼠标滚轮 (放在最外层，确保页面一加载就开始拦截)
-        window.addEventListener('wheel', (e) => {
-            // 如果 iframe 没有完全进入视口，【绝对不拦截】，放任外层 Framer 页面自然滚动！
-            if (!window._isIframeFullyVisible) return;
-
-            if (!window._isModelLoaded) {
-                // 加载未完成时，拦截向下滚动，强制锁定在当前 iframe 区域不让其向下划走
-                if (e.deltaY > 0) e.preventDefault();
-            } else if (window._handleVirtualScroll) {
-                // 加载完成后，交由时间轴拦截逻辑处理
-                window._handleVirtualScroll(e, e.deltaY, 'wheel');
-            }
-        }, { passive: false });
-
-        // 监听触控滑动 (Mobile)
-        let globalLastTouchY = 0;
-        window.addEventListener('touchstart', (e) => {
-            globalLastTouchY = e.touches[0].clientY;
-        }, { passive: true });
-
-        window.addEventListener('touchmove', (e) => {
-            const currentY = e.touches[0].clientY;
-            const deltaY = globalLastTouchY - currentY;
-            globalLastTouchY = currentY;
-
-            // 移动端：如果是左右横滑（旋转模型），禁止同时滚动时间轴
-            if (window._isHorizontalSwipe) return;
-
-            // 如果 iframe 没有完全进入视口，【绝对不拦截】！
-            if (!window._isIframeFullyVisible) return;
-
-            if (!window._isModelLoaded) {
-                if (deltaY > 0) e.preventDefault();
-            } else if (window._handleVirtualScroll) {
-                window._handleVirtualScroll(e, deltaY, 'touch');
-            }
-        }, { passive: false });
 
         init();
         animate();
@@ -505,10 +481,11 @@
             scene.add(ambientLight);
 
             // 5. 交互控制器 (TrackballControls，实现全方位无死角斜向自由拖拽，就像把玩实物一样)
-            controls = new TrackballControls(camera, renderer.domElement);
-            // 关键修复：TrackballControls 默认会将 touchAction 设为 'none' 吞掉所有滚动。
-            // 这里强制改回 'pan-y pinch-zoom'，实现：垂直滑动滚页面，水平滑动转模型
-            renderer.domElement.style.touchAction = 'pan-y pinch-zoom';
+            // 修改：将其挂载到位于最上层的 #scroll-container，这样它能捕捉到滑动，同时浏览器也会处理原生垂直滚动
+            const scrollContainer = document.getElementById('scroll-container');
+            controls = new TrackballControls(camera, scrollContainer);
+            // 关键修复：允许触摸时进行原生垂直滚动，TrackballControls 仅在横滑时生效
+            scrollContainer.style.touchAction = 'pan-y pinch-zoom';
             controls.rotateSpeed = 3.0;
             controls.noZoom = true; // 禁止缩放
             controls.noPan = true; // 禁止平移
@@ -520,52 +497,6 @@
             let isResetting = false;
             let resetTweenPos = null;
             let resetTweenUp = null;
-
-            // === 移动端/触屏交互优化：严格分离【横向旋转模型】与【纵向滚动时间轴】 ===
-            let _pointerStartX = 0;
-            let _pointerStartY = 0;
-            let _gestureDirection = null; // 'horizontal' | 'vertical' | null
-            window._isHorizontalSwipe = false;
-
-            renderer.domElement.addEventListener('pointerdown', (e) => {
-                if (e.pointerType === 'touch') {
-                    _pointerStartX = e.clientX;
-                    _pointerStartY = e.clientY;
-                    _gestureDirection = null;
-                    window._isHorizontalSwipe = false;
-                }
-            }, { capture: true });
-
-            renderer.domElement.addEventListener('pointermove', (e) => {
-                if (e.pointerType === 'touch') {
-                    if (!_gestureDirection) {
-                        const dx = Math.abs(e.clientX - _pointerStartX);
-                        const dy = Math.abs(e.clientY - _pointerStartY);
-                        if (dx > 5 || dy > 5) {
-                            _gestureDirection = dx > dy ? 'horizontal' : 'vertical';
-                        }
-                    }
-                    
-                    if (_gestureDirection === 'vertical') {
-                        // 如果是上下滑（意图滚动），阻止 TrackballControls 获取事件，避免把模型转飞
-                        e.stopImmediatePropagation();
-                    } else if (_gestureDirection === 'horizontal') {
-                        // 如果是左右滑（意图旋转模型），通知外层拦截器不要滚动虚拟时间轴
-                        window._isHorizontalSwipe = true;
-                    }
-                }
-            }, { capture: true });
-
-            const resetSwipeState = (e) => {
-                if (e.pointerType === 'touch') {
-                    window._isHorizontalSwipe = false;
-                }
-            };
-            renderer.domElement.addEventListener('pointerup', resetSwipeState, { capture: true });
-            renderer.domElement.addEventListener('pointercancel', resetSwipeState, { capture: true });
-            renderer.domElement.addEventListener('pointerout', resetSwipeState, { capture: true });
-            renderer.domElement.addEventListener('pointerleave', resetSwipeState, { capture: true });
-            // ==============================================================
 
             controls.addEventListener('start', () => { 
                 isDragging = true; 
@@ -1343,12 +1274,9 @@
                     ease: 'none'
                 }, 0);
 
-                // === 虚拟滚动事件拦截逻辑 ===
+                // === 原生滚动容器事件接管（虚拟滚动 2.0）===
                 let scrollProgress = 0;
-                // 调整这两个参数可以改变滑动的“阻力”感觉，越小越需要滑动更多次才能看完动画
-                const scrollSensitivity = 0.0006;
-                const touchSensitivity = 0.0010;
-
+                
                 function updateTimelineProgress(newProgress) {
                     scrollProgress = Math.max(0, Math.min(1, newProgress));
                     
@@ -1360,23 +1288,24 @@
                     // 利用 gsap 实现平滑的“跟随”感 (类似 scrub 效果)
                     gsap.to(entranceTl, {
                         progress: scrollProgress,
-                        duration: 0.8,
+                        duration: 0.5,
                         ease: 'power2.out',
-                        overwrite: true // 极其关键：迅速滑屏时，确保打断旧的 progress tween，防止动画打架卡死
+                        overwrite: true
                     });
                 }
 
-                // 赋值给全局拦截器
-                window._handleVirtualScroll = (e, deltaY, type) => {
-                    if ((deltaY > 0 && scrollProgress < 1) || (deltaY < 0 && scrollProgress > 0)) {
-                        e.preventDefault();
-                        const sensitivity = type === 'wheel' ? scrollSensitivity : touchSensitivity;
-                        updateTimelineProgress(scrollProgress + deltaY * sensitivity);
+                // 监听原生滚动事件
+                scrollContainer.addEventListener('scroll', () => {
+                    const maxScroll = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+                    if (maxScroll > 0) {
+                        const progress = scrollContainer.scrollTop / maxScroll;
+                        updateTimelineProgress(progress);
                     }
-                };
+                }, { passive: true });
 
-                // 标记加载完成，放开对加载期的硬拦截，交由 window._handleVirtualScroll 接管进度逻辑
+                // 标记加载完成，放开原生滚动容器，让用户能够通过原生交互滑动
                 window._isModelLoaded = true;
+                scrollContainer.style.overflowY = 'auto';
                 // ==============================================================
 
                 // HDRI 上下旋转动画：营造光线在模型上扫过的质感
