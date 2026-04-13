@@ -367,12 +367,40 @@
         window._isIframeFullyVisible = false; // 新增：是否完全在父页面可见
         window._handleVirtualScroll = null;
         window._currentTouchAbsorbed = false; // 新增：单次滑屏满载吸附锁
+        window._scrollProgress = 0; // 全局进度
+
+        // 核心突破点：利用 CSS touch-action 解决跨域 iframe 的 iOS Safari preventDefault 失效问题
+        window._updateTouchAction = () => {
+            // 直接应用在 body 和 canvas 上，防止被内部库覆盖
+            const els = [document.body];
+            if (typeof renderer !== 'undefined' && renderer.domElement) {
+                els.push(renderer.domElement);
+            }
+            
+            let action = 'pan-y pinch-zoom';
+            // 如果 iframe 没有完全露出，允许自由滚动父页面，以便用户将其滚入视口
+            if (window._isIframeFullyVisible && window._isModelLoaded) {
+                if (window._scrollProgress <= 0) {
+                    // 在顶部：允许上拉（手指往下滑，页面往上滚），阻断下拉（以便开始播放动画）
+                    action = 'pan-up pinch-zoom';
+                } else if (window._scrollProgress >= 1) {
+                    // 在底部：允许下拉（手指往上滑，页面往下滚），阻断上拉（以便倒播动画）
+                    action = 'pan-down pinch-zoom';
+                } else {
+                    // 在动画中间：彻底锁死原生滚动，全靠动画接管
+                    action = 'none';
+                }
+            }
+            
+            els.forEach(el => { if (el) el.style.touchAction = action; });
+        };
 
         // 监听跨域 iframe 的可见度，只有当 iframe 完全出现在视口中时，才拦截滚动
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 // 放宽到 0.55 解决移动端地址栏伸缩导致的完全可见判定失败
                 window._isIframeFullyVisible = entry.intersectionRatio >= 0.55;
+                window._updateTouchAction();
             });
         }, {
             threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.55, 0.6, 0.7, 0.8, 0.9, 1]
@@ -515,14 +543,15 @@
 
             // 5. 交互控制器 (TrackballControls，实现全方位无死角斜向自由拖拽，就像把玩实物一样)
             controls = new TrackballControls(camera, renderer.domElement);
-            // 关键修复：TrackballControls 默认会将 touchAction 设为 'none' 吞掉所有滚动。
-            // 这里强制改回 'pan-y pinch-zoom'，实现：垂直滑动滚页面，水平滑动转模型
-            renderer.domElement.style.touchAction = 'pan-y pinch-zoom';
+            // （注释掉原硬编码的 touchAction，我们已全面改用全局动态的 _updateTouchAction）
             controls.rotateSpeed = 3.0;
             controls.noZoom = true; // 禁止缩放
             controls.noPan = true; // 禁止平移
             controls.staticMoving = false; // 关闭静态移动，也就是开启阻尼顺滑效果
             controls.dynamicDampingFactor = 0.04; // 阻尼力度
+            
+            // 立刻应用最新的 touch-action 设置（覆盖 TrackballControls 的默认 'none'）
+            window._updateTouchAction();
 
             // 由于 TrackballControls 默认没有 autoRotate，我们自己接管自动旋转逻辑
             let isDragging = false;
@@ -1360,6 +1389,8 @@
 
                 function updateTimelineProgress(newProgress) {
                     scrollProgress = Math.max(0, Math.min(1, newProgress));
+                    window._scrollProgress = scrollProgress;
+                    window._updateTouchAction();
                     
                     // 动态控制自转：进度大于 0.4 时开启自转
                     if (window._autoRotateSettings) {
@@ -1396,6 +1427,7 @@
 
                 // 标记加载完成，放开对加载期的硬拦截，交由 window._handleVirtualScroll 接管进度逻辑
                 window._isModelLoaded = true;
+                window._updateTouchAction();
                 // ==============================================================
 
                 // HDRI 上下旋转动画：营造光线在模型上扫过的质感
