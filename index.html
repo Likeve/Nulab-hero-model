@@ -498,6 +498,41 @@
             let resetTweenPos = null;
             let resetTweenUp = null;
 
+            // === 移动端/触屏交互优化：严格分离【横向旋转模型】与【纵向滚动页面】 ===
+            let _pointerStartX = 0;
+            let _pointerStartY = 0;
+            let _gestureDirection = null; // 'horizontal' | 'vertical' | null
+
+            scrollContainer.addEventListener('pointerdown', (e) => {
+                if (e.pointerType === 'touch') {
+                    _pointerStartX = e.clientX;
+                    _pointerStartY = e.clientY;
+                    _gestureDirection = null;
+                }
+            }, { capture: true });
+
+            scrollContainer.addEventListener('pointermove', (e) => {
+                if (e.pointerType === 'touch') {
+                    if (!_gestureDirection) {
+                        const dx = Math.abs(e.clientX - _pointerStartX);
+                        const dy = Math.abs(e.clientY - _pointerStartY);
+                        if (dx > 5 || dy > 5) {
+                            _gestureDirection = dx > dy ? 'horizontal' : 'vertical';
+                        }
+                    }
+                    
+                    if (_gestureDirection === 'vertical') {
+                        // 如果是上下滑（意图滚动），彻底掐断传递，阻止 TrackballControls 接收到移动事件而导致模型被乱转
+                        e.stopImmediatePropagation();
+                    } else if (_gestureDirection === 'horizontal') {
+                        // 如果是水平滑，阻止默认行为（禁止任何可能触发的水平原生滚动/回退手势）
+                        e.preventDefault();
+                    }
+                }
+            }, { capture: true, passive: false });
+
+            // ==============================================================
+
             controls.addEventListener('start', () => { 
                 isDragging = true; 
                 isResetting = false;
