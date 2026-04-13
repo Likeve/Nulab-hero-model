@@ -381,13 +381,13 @@
             // 如果 iframe 没有完全露出，允许自由滚动父页面，以便用户将其滚入视口
             if (window._isIframeFullyVisible && window._isModelLoaded) {
                 if (window._scrollProgress <= 0) {
-                    // 在顶部：允许上拉（手指往下滑，页面往上滚），阻断下拉（以便开始播放动画）
-                    action = 'pan-up pinch-zoom';
-                } else if (window._scrollProgress >= 1) {
-                    // 在底部：允许下拉（手指往上滑，页面往下滚），阻断上拉（以便倒播动画）
+                    // 在顶部(进度0)：允许下拉(pan-down：手指往下滑，页面往上滚以退回上一屏)；阻断上拉(pan-up：手指往上滑)，迫使用户触发动画
                     action = 'pan-down pinch-zoom';
+                } else if (window._scrollProgress >= 1) {
+                    // 在底部(进度1)：允许上拉(pan-up：手指往上滑，页面往下滚以拉出下一屏)；阻断下拉(pan-down)，迫使用户倒播动画
+                    action = 'pan-up pinch-zoom';
                 } else {
-                    // 在动画中间：彻底锁死原生滚动，全靠动画接管
+                    // 在动画中间：彻底锁死原生纵向滚动，全靠动画接管
                     action = 'none';
                 }
             }
@@ -410,6 +410,13 @@
 
         // 监听鼠标滚轮 (放在最外层，确保页面一加载就开始拦截)
         window.addEventListener('wheel', (e) => {
+            // 只要有滚动发生在区域上，立即吸附至视口 100vh
+            if (!window._isIframeFullyVisible) {
+                try {
+                    document.body.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } catch(err) {}
+            }
+
             // 如果 iframe 没有完全进入视口，【绝对不拦截】，放任外层 Framer 页面自然滚动！
             if (!window._isIframeFullyVisible) return;
 
@@ -427,6 +434,13 @@
         window.addEventListener('touchstart', (e) => {
             globalLastTouchY = e.touches[0].clientY;
             window._currentTouchAbsorbed = false; // 每次手指新碰到屏幕时，重置滑动锁
+            
+            // 只要手指触碰到这个 Embed 区域，立即尝试将其吸附到视口正中央（实现 100vh 完全霸屏）
+            if (!window._isIframeFullyVisible) {
+                try {
+                    document.body.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } catch(err) {}
+            }
         }, { passive: true });
 
         window.addEventListener('touchmove', (e) => {
