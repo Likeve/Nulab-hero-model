@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D 西林瓶 - 前卫生化质感</title>
+    <title>3D 西林瓶 - 纯模型版</title>
     <style>
         html {
             background: #000000;
@@ -45,291 +45,41 @@
         #canvas-container:active {
             cursor: grabbing;
         }
-        /* 模型加载前：全屏纯黑遮罩 + 浅灰进度条（pointer-events:none 便于嵌入页滚轮穿透） */
-        #loading {
-            position: fixed;
-            inset: 0;
-            z-index: 100;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #000000;
-            transition: opacity 0.45s ease;
-            pointer-events: none;
-        }
-        #loading.is-hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-        .loading-inner {
-            width: min(320px, 72vw);
-            text-align: center;
-        }
-        .loading-bar-track {
-            width: 100%;
-            height: 4px;
-            border-radius: 2px;
-            background: #333333;
-            overflow: hidden;
-        }
-        .loading-bar-fill {
-            height: 100%;
-            width: 0%;
-            border-radius: 2px;
-            background: #c4c4c4;
-            transition: width 0.12s ease-out;
-        }
-        .loading-caption {
-            margin: 14px 0 0;
-            font-size: 11px;
-            letter-spacing: 0.28em;
-            text-transform: uppercase;
-            color: #8a8a8a;
-        }
-
-        /* 前景文本信息 */
-        .about-section {
-            padding: 45vh 40px 0; /* 让首个文本块直接位于第一屏的中间 */
-            margin-top: 0;
-            background-color: transparent; /* 背景透明，透出固定在底部的 3D 模型 */
-            position: absolute; /* 使用绝对定位，由虚拟滚动驱动 */
-            top: 0;
-            left: 0;
-            width: 100%;
-            box-sizing: border-box;
-            z-index: 10;
-            pointer-events: none; /* 允许鼠标穿透去拖拽背景里的 3D 模型 */
-        }
-
-        .section-main {
-            display: flex;
-            flex-direction: column; /* 上下布局 */
-            justify-content: flex-start;
-            gap: 400px;
-            max-width: 1380px;
-            margin: 0 auto;
-            pointer-events: none; /* 改回 none，让所有的点击/拖拽穿透文字层，直接作用到底部的 3D 模型上 */
-        }
-
-        /* 上排 */
-        .text-group {
-            display: flex;
-            align-items: center; /* meta 与 tagline 垂直居中对齐 */
-            justify-content: space-between;
-            width: 100%;
-        }
-
-        .meta {
-            flex: 1; /* 填充剩余空间 */
-            display: flex;
-            flex-direction: row;
-            align-items: center;
-            gap: 128px;
-            color: #b0b0b0;
-        }
-
-        .meta h5 {
-            font-size: 14px;
-            margin: 0;
-        }
-
-        .divider {
-            display: none; /* 左右排列后隐藏分割线 */
-        }
-
-        .tagline {
-            width: 320px;
-            flex-shrink: 0;
-            text-align: left;
-        }
-
-        .tagline h2 {
-            font-size: 54px;
-            margin: 0;
-            line-height: 1em;
-            letter-spacing: -0.03em;
-        }
-
-        .tagline .primary {
-            color: #fff;
-        }
-
-        .tagline .secondary {
-            color: #b0b0b0;
-        }
-
-        /* 下排 */
-        .content {
-            display: flex;
-            align-items: center; /* heading-stack 与 description 垂直居中对齐 */
-            justify-content: space-between;
-            width: 100%;
-        }
-
-        .heading-stack {
-            flex: 1; /* 填充剩余空间 */
-            display: flex;
-            align-items: flex-start;
-            gap: 8px;
-            color: #b0b0b0;
-        }
-
-        .heading-stack h5 {
-            font-size: 14px;
-            margin: 0;
-            letter-spacing: 0.1em;
-            line-height: 1;
-        }
-
-        .heading-stack .icon {
-            color: #ff5700;
-        }
-
-        .icon svg {
-            width: 16px;
-            height: 16px;
-        }
-
-        .description {
-            width: 320px;
-            flex-shrink: 0;
-            margin-top: 0;
-        }
-
-        .description h2 {
-            font-size: 54px;
-            margin: 0;
-            color: #b0b0b0;
-            line-height: 1em;
-            letter-spacing: -0.03em;
-            font-weight: 500;
-        }
-
-        .highlight {
-            color: #fff;
-        }
-
         /* 平板：≤810px */
         @media (max-width: 810px) {
             .hero-section {
                 min-height: 100dvh;
                 height: 100dvh;
             }
-            .loading-inner {
-                width: min(300px, 78vw);
-            }
-            .loading-caption {
-                font-size: 10px;
-                letter-spacing: 0.22em;
-            }
             #canvas-container {
                 touch-action: pan-y pinch-zoom;
             }
         }
-        /* 手机：≤390px */
-        @media (max-width: 390px) {
-            .loading-inner {
-                width: min(260px, 86vw);
-            }
-            .loading-bar-track {
-                height: 3px;
-            }
-            .loading-caption {
-                font-size: 9px;
-                letter-spacing: 0.18em;
-                margin-top: 12px;
-            }
-        }
-        @media (max-width: 810px) {
-            .about-section {
-                padding: 40vh 24px 0;
-            }
-            .section-main {
-                flex-direction: column;
-                gap: 400px; /* 与桌面一致：上下两块文案间距 400px */
-            }
-            .text-group,
-            .content {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .meta {
-                flex-direction: column;
-                align-items: flex-start;
-                gap: 0; /* Logo 与年份上下紧排，无额外间距 */
-            }
-            .text-group {
-                gap: 162px; /* meta 与 tagline 纵向间距 */
-            }
-            .content {
-                gap: 62px; /* heading-stack 与 description 纵向间距 */
-            }
-            .tagline, .description {
-                max-width: 320px;
-                width: 100%;
-                margin-top: 0;
-                align-self: flex-end; /* 列布局下整块靠右 */
-                text-align: right;
-            }
-            .tagline h2, .description h2 {
-                font-size: 32px;
-                text-align: right;
-            }
+        #error-log {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            background: rgba(255,0,0,0.8);
+            color: white;
+            z-index: 9999;
+            font-family: monospace;
+            padding: 10px;
+            pointer-events: none;
+            display: none;
         }
     </style>
 </head>
 <body>
     <div class="hero-section">
-        <div id="loading" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="加载 3D 模型">
-            <div class="loading-inner">
-                <div class="loading-bar-track">
-                    <div class="loading-bar-fill" id="loading-bar-fill"></div>
-                </div>
-                <p class="loading-caption" id="loading-caption">Loading</p>
-            </div>
-        </div>
         <div id="canvas-container"></div>
     </div>
-
-    <section id="about-us" class="about-section">
-        <div class="section-main">
-            <!-- 上侧品牌信息块 -->
-            <div class="text-group">
-                <div class="meta">
-                    <h5 class="logo">Nu Labs®</h5>
-                    <h5 class="year">©2025</h5>
-                </div>
-
-                <div class="tagline">
-                    <h2>
-                        <span class="primary">// Empowered by AI.</span><br>
-                        <span class="secondary">Driven by Human Vision.</span>
-                    </h2>
-                </div>
-            </div>
-
-            <!-- 下侧内容 -->
-            <div class="content">
-                <div class="heading-stack">
-                    <div class="icon">
-                        <svg viewBox="0 0 24 24">
-                            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2"/>
-                        </svg>
-                    </div>
-                    <h5 class="heading-label">ABOUT US</h5>
-                </div>
-
-                <div class="description">
-                    <h2>
-                        We specialize in delivering digital products —
-                        <span class="highlight">
-                            intelligently optimized through AI.
-                        </span>
-                    </h2>
-                </div>
-            </div>
-        </div>
-    </section>
+    <div id="error-log"></div>
+    <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            document.getElementById('error-log').style.display = 'block';
+            document.getElementById('error-log').innerHTML += '<br>' + msg;
+            return false;
+        };
+    </script>
 
     <!-- 引入 GSAP 动画库 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
@@ -362,97 +112,8 @@
 
         let camera, scene, renderer, controls;
 
-        // 全局滚动拦截（确保在整个模型加载和交互期间锁定父页面滚动，除非交互完成）
-        window._isModelLoaded = false;
-        window._isIframeFullyVisible = false; // 新增：是否完全在父页面可见
-        window._handleVirtualScroll = null;
-        window._currentTouchAbsorbed = false; // 新增：单次滑屏满载吸附锁
-        window._scrollProgress = 0; // 全局进度
-
-        // 核心突破点：利用 CSS touch-action 解决跨域 iframe 的 iOS Safari preventDefault 失效问题
-        window._updateTouchAction = () => {
-            // 直接应用在 body 和 canvas 上，防止被内部库覆盖
-            const els = [document.body];
-            if (typeof renderer !== 'undefined' && renderer.domElement) {
-                els.push(renderer.domElement);
-            }
-            
-            let action = 'pan-y pinch-zoom';
-            // 如果 iframe 没有完全露出，允许自由滚动父页面，以便用户将其滚入视口
-            if (window._isIframeFullyVisible && window._isModelLoaded) {
-                if (window._scrollProgress <= 0) {
-                    // 在顶部：允许上拉（手指往下滑，页面往上滚），阻断下拉（以便开始播放动画）
-                    action = 'pan-up pinch-zoom';
-                } else if (window._scrollProgress >= 1) {
-                    // 在底部：允许下拉（手指往上滑，页面往下滚），阻断上拉（以便倒播动画）
-                    action = 'pan-down pinch-zoom';
-                } else {
-                    // 在动画中间：彻底锁死原生滚动，全靠动画接管
-                    action = 'none';
-                }
-            }
-            
-            els.forEach(el => { if (el) el.style.touchAction = action; });
-        };
-
-        // 监听跨域 iframe 的可见度，只有当 iframe 完全出现在视口中时，才拦截滚动
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                // 放宽到 0.55 解决移动端地址栏伸缩导致的完全可见判定失败
-                window._isIframeFullyVisible = entry.intersectionRatio >= 0.55;
-                window._updateTouchAction();
-            });
-        }, {
-            threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.55, 0.6, 0.7, 0.8, 0.9, 1]
-        });
-        // 观察 html 元素（代表整个 iframe 的尺寸）
-        observer.observe(document.documentElement);
-
-        // 监听鼠标滚轮 (放在最外层，确保页面一加载就开始拦截)
-        window.addEventListener('wheel', (e) => {
-            // 如果 iframe 没有完全进入视口，【绝对不拦截】，放任外层 Framer 页面自然滚动！
-            if (!window._isIframeFullyVisible) return;
-
-            if (!window._isModelLoaded) {
-                // 加载未完成时，拦截向下滚动，强制锁定在当前 iframe 区域不让其向下划走
-                if (e.deltaY > 0) e.preventDefault();
-            } else if (window._handleVirtualScroll) {
-                // 加载完成后，交由时间轴拦截逻辑处理
-                window._handleVirtualScroll(e, e.deltaY, 'wheel');
-            }
-        }, { passive: false });
-
-        // 监听触控滑动 (Mobile)
-        let globalLastTouchY = 0;
-        window.addEventListener('touchstart', (e) => {
-            globalLastTouchY = e.touches[0].clientY;
-            window._currentTouchAbsorbed = false; // 每次手指新碰到屏幕时，重置滑动锁
-        }, { passive: true });
-
-        window.addEventListener('touchmove', (e) => {
-            const currentY = e.touches[0].clientY;
-            const deltaY = globalLastTouchY - currentY;
-            globalLastTouchY = currentY;
-
-            // 移动端：如果是左右横滑（旋转模型），禁止同时滚动时间轴
-            if (window._isHorizontalSwipe) return;
-
-            // 如果 iframe 没有完全进入视口，【绝对不拦截】！
-            if (!window._isIframeFullyVisible) return;
-
-            // 【关键修复】：如果当前这一下手指已经把动画推满了，强制锁死这一下手指后续的所有滑动！
-            // 必须等用户抬起手指再重新划，才能真正滚出这个区域，避免“一滑到底直接滑出页面”。
-            if (window._currentTouchAbsorbed) {
-                e.preventDefault();
-                return;
-            }
-
-            if (!window._isModelLoaded) {
-                if (deltaY > 0) e.preventDefault();
-            } else if (window._handleVirtualScroll) {
-                window._handleVirtualScroll(e, deltaY, 'touch');
-            }
-        }, { passive: false });
+        // 设置默认触摸行为为允许垂直滚动
+        document.body.style.touchAction = 'pan-y pinch-zoom';
 
         init();
         animate();
@@ -468,7 +129,7 @@
             
             // 色调映射与曝光，营造高级摄影质感
             renderer.toneMapping = THREE.ACESFilmicToneMapping;
-            renderer.toneMappingExposure = 2.0;
+            renderer.toneMappingExposure = 7.0;
             
             // 启用阴影
             renderer.shadowMap.enabled = true;
@@ -520,7 +181,7 @@
                     }
                     
                     // 适当提升曝光度，确保在暗调环境下能清晰看清标签上的文字，同时保持整体深邃感
-                    renderer.toneMappingExposure = 2.0; 
+                    renderer.toneMappingExposure = 7.0; 
 
                     // 释放内存
                     texture.dispose();
@@ -531,11 +192,20 @@
             // 天光保持纯白，地面反光颜色从极暗的 0x111111 提亮到中灰色 0x666666，强度提升到 1.5，让暗部细节透出来
             const hemiLight = new THREE.HemisphereLight(0xffffff, 0x666666, 1.5); 
             scene.add(hemiLight);
+            hemiLight.visible = false; // 默认关闭底部补光，需要时在面板「底部补光」中开启
 
-            // 添加一盏微弱的正面主光源，专门用来照亮正面标签上的文字
-            const frontLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            // 添加一盏微弱的正面主光源，专门用来照亮正面标签上的文字 (改为聚光灯以便控制范围)
+            const frontLight = new THREE.SpotLight(0xffffff, 1.2);
             frontLight.position.set(0, 0, 5); // 从正前方打光
+            frontLight.angle = Math.PI / 3; // 默认照射角度/范围
+            frontLight.penumbra = 0.5; // 边缘模糊/柔和度
+            frontLight.distance = 20; // 照射距离
             scene.add(frontLight);
+
+            // 添加一盏用于“扫光”效果的强点光源（点光源更容易在金属和玻璃上形成明显的高光移动）
+            const sweepLight = new THREE.PointLight(0xffffff, 0, 30); // 初始亮度为 0，照射距离为 30
+            sweepLight.position.set(-10, 0, 2.5); // 初始在左侧，稍微靠近瓶身前方以产生强反射
+            scene.add(sweepLight);
 
             // 再额外增加一个微弱的全局环境光，作为最终托底，确保无论怎么转都不会有纯黑的死角
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
@@ -543,15 +213,14 @@
 
             // 5. 交互控制器 (TrackballControls，实现全方位无死角斜向自由拖拽，就像把玩实物一样)
             controls = new TrackballControls(camera, renderer.domElement);
-            // （注释掉原硬编码的 touchAction，我们已全面改用全局动态的 _updateTouchAction）
             controls.rotateSpeed = 3.0;
             controls.noZoom = true; // 禁止缩放
             controls.noPan = true; // 禁止平移
             controls.staticMoving = false; // 关闭静态移动，也就是开启阻尼顺滑效果
             controls.dynamicDampingFactor = 0.04; // 阻尼力度
             
-            // 立刻应用最新的 touch-action 设置（覆盖 TrackballControls 的默认 'none'）
-            window._updateTouchAction();
+            // 确保画布允许垂直滚动
+            renderer.domElement.style.touchAction = 'pan-y pinch-zoom';
 
             // 由于 TrackballControls 默认没有 autoRotate，我们自己接管自动旋转逻辑
             let isDragging = false;
@@ -617,8 +286,6 @@
                 isResetting = true;
 
                 // 释放鼠标后，使用 GSAP 平滑地将相机恢复到默认初始状态
-                // 关键修复：不能直接用 GSAP 线性修改 x, y, z，那会让相机走“直线捷径”穿过模型内部，导致视觉上瞬间放大穿模。
-                // 必须使用球面插值 (Slerp) 或保持半径，让相机沿着圆弧轨迹飞回。
                 let dummy = { t: 0 };
                 let startPos = camera.position.clone();
                 let targetPos = new THREE.Vector3(0, 0, 8); // 默认初始位置
@@ -629,9 +296,8 @@
                 resetTweenPos = gsap.to(dummy, {
                     t: 1,
                     duration: 2.5, // 回弹时间延长，动作更缓慢优雅
-                    ease: "power4.out", // 极强的缓出曲线，让运动一开始快，然后在靠近原点时非常缓慢地减速停下
+                    ease: "power4.out", 
                     onUpdate: () => {
-                        // 使用 lerp 后再 normalize() 乘上半径，这在数学上等同于完美的球面圆弧运动，确保相机和模型的距离永远恒定！
                         camera.position.copy(startPos).lerp(targetPos, dummy.t).normalize().multiplyScalar(radius);
                         camera.up.copy(startUp).lerp(targetUp, dummy.t).normalize();
                         camera.lookAt(0, 0, 0);
@@ -650,15 +316,13 @@
             };
 
             // ==========================================
-            // 调试面板 (lil-gui) — 已关闭：恢复时删除下一行 `let gui = null`，并取消 GUI_RESTORE_BLOCK_A / _B / _C 三处块注释（须一并恢复）
+            // 调试面板 (lil-gui)
             // ==========================================
-            let gui = null;
-
-            /* GUI_RESTORE_BLOCK_A 光照与环境（恢复时去掉本行与对应闭合行的星杠注释）
-            const gui = new lil.GUI({ title: '光照与环境控制' });
+            let gui = new lil.GUI({ title: '光照与环境控制' });
+            gui.hide(); // 隐藏 UI 面板
             
             // 全局曝光
-            gui.add(renderer, 'toneMappingExposure', 0, 3).name('全局曝光度 (Exposure)');
+            gui.add(renderer, 'toneMappingExposure', 0, 10).name('全局曝光度 (Exposure)');
 
             // 环境光旋转 (HDRI)
             const envFolder = gui.addFolder('HDRI 环境光 (Environment)');
@@ -681,10 +345,13 @@
             hemiFolder.add(hemiLight, 'visible').name('开启/关闭');
             hemiFolder.add(hemiLight, 'intensity', 0, 5).name('强度');
             
-            // 正面高光 (DirectionalLight)
+            // 正面主光 (SpotLight)
             const dirFolder = gui.addFolder('正面主光 (FrontLight)');
             dirFolder.add(frontLight, 'visible').name('开启/关闭');
-            dirFolder.add(frontLight, 'intensity', 0, 5).name('强度');
+            dirFolder.add(frontLight, 'intensity', 0, 5).name('光照强度');
+            dirFolder.add(frontLight, 'angle', 0, Math.PI / 2).name('光照范围/角度 (Angle)');
+            dirFolder.add(frontLight, 'penumbra', 0, 1).name('光照边缘模糊 (Penumbra)');
+            dirFolder.add(frontLight, 'distance', 0, 50).name('照射最远距离');
             dirFolder.add(frontLight.position, 'x', -10, 10).name('位置 X');
             dirFolder.add(frontLight.position, 'y', -10, 10).name('位置 Y');
             dirFolder.add(frontLight.position, 'z', -10, 10).name('位置 Z');
@@ -693,76 +360,142 @@
             const ambFolder = gui.addFolder('全局兜底光 (AmbientLight)');
             ambFolder.add(ambientLight, 'visible').name('开启/关闭');
             ambFolder.add(ambientLight, 'intensity', 0, 2).name('强度');
-            */
 
-            // 生成横向拉丝纹理（程序化生成，用作粗糙度和凹凸贴图，完美规避接缝色块又提供物理拉丝感）
-            // 增强：加入了更多的随机短横线和颗粒微小瑕疵，使其更有手工拉丝和真实金属的随机感
+            // 视频录制 (Video Recording)
+            const recFolder = gui.addFolder('🎥 视频导出 (Video Export)');
+            const recState = {
+                record10s: function() {
+                    if (window._isRecording) {
+                        alert("正在录制中，请稍后...");
+                        return;
+                    }
+                    window._isRecording = true;
+                    
+                    // 重置动画
+                    if (window._entranceTl) {
+                        window._entranceTl.pause();
+                        window._entranceTl.time(0);
+                    }
+                    if (window._heroBottleRoot) {
+                        window._heroBottleRoot.rotation.y = 0;
+                    }
+                    if (window._autoRotateSettings) {
+                        window._autoRotateSettings.enabled = false;
+                    }
+
+                    // 开始录制 (120fps)
+                    const stream = renderer.domElement.captureStream(120); 
+                    let options = { videoBitsPerSecond: 100000000 };
+                    let mediaRecorder;
+                    try {
+                        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9', ...options });
+                    } catch (e) {
+                        try {
+                            mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/mp4', ...options });
+                        } catch (e2) {
+                            mediaRecorder = new MediaRecorder(stream, options);
+                        }
+                    }
+                    
+                    const chunks = [];
+                    mediaRecorder.ondataavailable = e => {
+                        if (e.data.size > 0) chunks.push(e.data);
+                    };
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(chunks, { type: mediaRecorder.mimeType || 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        // 后缀名判断
+                        const ext = (mediaRecorder.mimeType && mediaRecorder.mimeType.includes('mp4')) ? 'mp4' : 'webm';
+                        a.download = `3d-bottle-animation-10s-120fps.${ext}`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        window._isRecording = false;
+                        document.title = '3D 西林瓶 - 纯模型版';
+                        alert('✅ 录制完成！视频已下载。');
+                    };
+                    
+                    mediaRecorder.start();
+                    document.title = '🔴 正在录制 10秒 视频...';
+                    
+                    // 重启 GSAP 动画时间轴
+                    if (window._entranceTl) {
+                        window._entranceTl.restart();
+                    }
+                    
+                    // 10秒后停止
+                    setTimeout(() => {
+                        if (mediaRecorder.state !== "inactive") {
+                            mediaRecorder.stop();
+                        }
+                    }, 10000); 
+                }
+            };
+            recFolder.add(recState, 'record10s').name('⏺️ 点击录制 10秒 动画视频');
+
             function generateBrushedTexture() {
                 const canvas = document.createElement('canvas');
                 canvas.width = 1024;
                 canvas.height = 1024;
                 const context = canvas.getContext('2d');
                 
-                // 基础中性灰
                 context.fillStyle = '#808080';
                 context.fillRect(0, 0, 1024, 1024);
                 
-                // 1. 绘制主体长横向金属丝划痕
                 for (let i = 0; i < 8000; i++) {
                     const isLight = Math.random() > 0.5;
-                    const alpha = Math.random() * 0.12; // 稍微提升长丝的透明度对比
+                    const alpha = Math.random() * 0.12; 
                     context.fillStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
                     
                     const y = Math.random() * 1024;
                     const x = Math.random() * 1024;
-                    const width = 200 + Math.random() * 800; // 横向细长
-                    const height = Math.random() * 1.5; // 极细的划痕高度
+                    const width = 200 + Math.random() * 800; 
+                    const height = Math.random() * 1.5; 
                     
                     context.fillRect(x, y, width, height);
                 }
 
-                // 2. 绘制短促的、随机的横向断丝（增强随机不平整感）
                 for (let i = 0; i < 15000; i++) {
                     const isLight = Math.random() > 0.5;
-                    const alpha = Math.random() * 0.15; // 短丝对比度更强一点
+                    const alpha = Math.random() * 0.15; 
                     context.fillStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
                     
                     const y = Math.random() * 1024;
                     const x = Math.random() * 1024;
-                    const width = 5 + Math.random() * 40; // 短促的横线
+                    const width = 5 + Math.random() * 40; 
                     const height = Math.random() * 2.0; 
                     
                     context.fillRect(x, y, width, height);
                 }
 
-                // 3. 绘制金属表面微小的随机颗粒瑕疵点 (noise)
                 for (let i = 0; i < 30000; i++) {
                     const isLight = Math.random() > 0.5;
-                    const alpha = Math.random() * 0.18; // 颗粒点要有足够的深度/凸起感
+                    const alpha = Math.random() * 0.18; 
                     context.fillStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
                     
                     const y = Math.random() * 1024;
                     const x = Math.random() * 1024;
-                    const size = Math.random() * 1.5; // 点状噪点
+                    const size = Math.random() * 1.5; 
                     
                     context.fillRect(x, y, size, size);
                 }
 
-                // 4. 绘制少量的斜向/随机角度的较深物理划痕，增强破损和使用痕迹感
                 for (let i = 0; i < 400; i++) {
                     const isLight = Math.random() > 0.5;
-                    const alpha = Math.random() * 0.3; // 划痕对比度更高
+                    const alpha = Math.random() * 0.3; 
                     context.strokeStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
-                    context.lineWidth = Math.random() * 2.0; // 划痕有粗细变化
+                    context.lineWidth = Math.random() * 2.0; 
                     
                     context.beginPath();
                     const startX = Math.random() * 1024;
                     const startY = Math.random() * 1024;
                     context.moveTo(startX, startY);
                     
-                    // 划痕长度和略微倾斜的角度
                     const length = 10 + Math.random() * 150;
-                    const angle = (Math.random() - 0.5) * 0.6; // 在水平方向上下产生最高约17度的随机倾斜
+                    const angle = (Math.random() - 0.5) * 0.6; 
                     context.lineTo(startX + Math.cos(angle) * length, startY + Math.sin(angle) * length);
                     context.stroke();
                 }
@@ -770,46 +503,41 @@
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.wrapS = THREE.RepeatWrapping;
                 texture.wrapT = THREE.RepeatWrapping;
-                texture.repeat.set(4, 2); // 增加UV重复采样，使丝线更密集细长
+                texture.repeat.set(4, 2); 
                 return texture;
             }
 
-            // 生成玻璃微小瑕疵/噪点贴图 (用作玻璃表面的微弱物理凹凸，增加真实感)
             function generateNoiseTexture() {
                 const canvas = document.createElement('canvas');
                 canvas.width = 512;
                 canvas.height = 512;
                 const context = canvas.getContext('2d');
                 
-                // 基础平滑中性灰
                 context.fillStyle = '#808080';
                 context.fillRect(0, 0, 512, 512);
                 
-                // 绘制随机噪点瑕疵
                 for (let i = 0; i < 40000; i++) {
                     const isLight = Math.random() > 0.5;
-                    const alpha = Math.random() * 0.15; // 极微弱的噪点强度
+                    const alpha = Math.random() * 0.15; 
                     context.fillStyle = isLight ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`;
                     
                     const y = Math.random() * 512;
                     const x = Math.random() * 512;
-                    const size = Math.random() * 1.5; // 极小的瑕疵点
+                    const size = Math.random() * 1.5; 
                     
                     context.fillRect(x, y, size, size);
                 }
 
-                // 添加玻璃表面的随机长划痕瑕疵（磨损感）
                 for (let i = 0; i < 300; i++) {
-                    const alpha = Math.random() * 0.25; // 划痕较噪点稍强
-                    context.strokeStyle = `rgba(255,255,255,${alpha})`; // 玻璃划痕通常是发白的微凹/反光
-                    context.lineWidth = 0.5 + Math.random() * 1.5; // 粗细不均的划痕
+                    const alpha = Math.random() * 0.25; 
+                    context.strokeStyle = `rgba(255,255,255,${alpha})`; 
+                    context.lineWidth = 0.5 + Math.random() * 1.5; 
                     
                     context.beginPath();
                     const startX = Math.random() * 512;
                     const startY = Math.random() * 512;
                     context.moveTo(startX, startY);
                     
-                    // 玻璃划痕可以是任意角度的
                     const length = 10 + Math.random() * 80;
                     const angle = Math.random() * Math.PI * 2;
                     context.lineTo(startX + Math.cos(angle) * length, startY + Math.sin(angle) * length);
@@ -819,83 +547,76 @@
                 const texture = new THREE.CanvasTexture(canvas);
                 texture.wrapS = THREE.RepeatWrapping;
                 texture.wrapT = THREE.RepeatWrapping;
-                texture.repeat.set(4, 4); // 密集采样，使其变成极小的高频噪点
+                texture.repeat.set(4, 4); 
                 return texture;
             }
 
             const brushedTex = generateBrushedTexture();
             const noiseTex = generateNoiseTexture();
 
-            // 6. 材质定义
-            // 真实PBR：拉丝质感银色金属盖 (引入增强的随机横向拉丝与颗粒瑕疵贴图)
             const brushedMetal = new THREE.MeshPhysicalMaterial({
-                color: 0xeaf2fc, // 冰蓝色冷底色，彻底抵消任何环境暖光，确保呈现纯银/冷酷的生化感
-                metalness: 1.0, // 纯金属
-                roughness: 0.65, // 大幅提升基础粗糙度，产生高级的 blur 磨砂感
-                roughnessMap: brushedTex, // 划痕处会有不同的粗糙度反光
-                bumpMap: brushedTex, // 物理凹凸，让高光在横向纹理和噪点上产生真实的破碎感
-                bumpScale: 0.008, // 大幅加深凹凸值，让金属表面的颗粒噪点和破损划痕更加粗糙显眼
-                envMapIntensity: 2.0, // 调整反射强度，配合粗糙表面
-                clearcoat: 0.2, // 增加微弱的表面磨砂清漆
-                clearcoatRoughness: 0.5 // 清漆层非常粗糙，强化反光点被打散和 blur 的视觉效果
+                color: 0xeaf2fc, 
+                metalness: 1.0, 
+                roughness: 0.65, 
+                roughnessMap: brushedTex, 
+                bumpMap: brushedTex, 
+                bumpScale: 0.008, 
+                envMapIntensity: 2.0, 
+                clearcoat: 0.2, 
+                clearcoatRoughness: 0.5 
             });
 
-            // 高透纯净玻璃：彻底重构 PBR 参数，解决所有泛白和雾面问题
             const clearGlass = new THREE.MeshPhysicalMaterial({
-                color: 0xffffff, // 纯白透射
-                metalness: 0.863, // 按截图设置
-                roughness: 0.059, // 按截图设置
-                transmission: 1.0, // 按截图设置
-                ior: 1.703, // 按截图设置
-                thickness: 0.483, // 按截图设置
+                color: 0xffffff, 
+                metalness: 0.863, 
+                roughness: 0.059, 
+                transmission: 1.0, 
+                ior: 1.703, 
+                thickness: 0.483, 
                 transparent: true,
-                opacity: 0.406, // 按截图设置
-                depthWrite: true, // 按截图设置开启
-                depthTest: true, // 按截图设置开启
-                side: THREE.BackSide, // 按截图设置
-                envMapIntensity: 1.42, // 按截图设置
-                clearcoat: 0.225, // 按截图设置
-                clearcoatRoughness: 0.311, // 按截图设置
-                specularIntensity: 0.92, // 按截图设置
-                bumpScale: 0.0046 // 按截图设置
+                opacity: 0.406, 
+                depthWrite: true, 
+                depthTest: true, 
+                side: THREE.BackSide, 
+                envMapIntensity: 1.42, 
+                clearcoat: 0.225, 
+                clearcoatRoughness: 0.311, 
+                specularIntensity: 0.92, 
+                bumpScale: 0.0046 
             });
 
-            // 橡胶塞
             const rubber = new THREE.MeshStandardMaterial({
-                color: 0x4E4E4E, // 极深灰色/近黑
-                roughness: 0.1,  // 极度粗糙，吸收表面反光
-                metalness: 0.0,  // 移除金属度，避免金属反光
-                envMapIntensity: 0.1 // 【关键】大幅降低环境光反射，避免在高曝光的 HDRI 环境下被整体照亮泛灰
+                color: 0x4E4E4E, 
+                roughness: 0.1,  
+                metalness: 0.0,  
+                envMapIntensity: 0.1 
             });
 
-            // 生化粉末质感 (实质的白色颗粒粉末)
             const whitePowder = new THREE.MeshStandardMaterial({
                 color: 0xffffff,
-                roughness: 1.0, // 极度粗糙无反光
+                roughness: 1.0, 
                 metalness: 0.0,
-                bumpMap: noiseTex, // 复用玻璃的微小瑕疵贴图来制造粉末表面的细微结块/凹凸颗粒感
-                bumpScale: 0.2, // 放大凹凸值，形成清晰的物理粉末颗粒表面
+                bumpMap: noiseTex, 
+                bumpScale: 0.2, 
                 emissive: 0xffffff,
-                emissiveIntensity: 1.0, // 加入强烈的自发光，突破有色玻璃的染色过滤
-                envMapIntensity: 0.2 // 粉末几乎不反射环境
+                emissiveIntensity: 1.0, 
+                envMapIntensity: 0.2 
             });
-
-            // ==========================================
-            // 材质控制 (Material Controls)
-            // ==========================================
             
-            // 提前声明部件数组，供 UI 控制器在回调中访问
             let modelParts = {
                 cap: [],
                 glass: [],
                 rubber: [],
                 powder: [],
-                label: [], // 全部标签网格（兼容）
-                label1: [], // biaoqian1（不含 _2）
-                label2: [] // biaoqian1_2
+                label: [], 
+                label1: [], 
+                label2: [] 
             };
 
-            /* GUI_RESTORE_BLOCK_B 材质 folders（须与 BLOCK_A 同时恢复）
+            // ==========================================
+            // 材质控制 (Material Controls)
+            // ==========================================
+            
             const matFolder = gui.addFolder('材质属性控制 (Materials)');
             
             const glassFolder = matFolder.addFolder('高透玻璃 (Glass)');
@@ -931,6 +652,30 @@
             metalFolder.add(brushedMetal, 'clearcoatRoughness', 0, 1).name('清漆粗糙度');
             metalFolder.close();
 
+            const rubberFolder = matFolder.addFolder('橡胶塞 (Rubber)');
+            rubberFolder.add(rubber, 'roughness', 0, 1).name('粗糙度').onChange((val) => {
+                if (modelParts.rubber) modelParts.rubber.forEach((mesh) => { mesh.material.roughness = val; });
+            });
+            rubberFolder.add(rubber, 'metalness', 0, 1).name('金属度').onChange((val) => {
+                if (modelParts.rubber) modelParts.rubber.forEach((mesh) => { mesh.material.metalness = val; });
+            });
+            rubberFolder.add(rubber, 'envMapIntensity', 0, 5).name('环境反射强度 (受光)').onChange((val) => {
+                if (modelParts.rubber) modelParts.rubber.forEach((mesh) => { mesh.material.envMapIntensity = val; });
+            });
+            const rubberColorObj = { color: rubber.color.getHex(), emissive: rubber.emissive.getHex() };
+            rubberFolder.addColor(rubberColorObj, 'color').name('颜色').onChange((val) => {
+                rubber.color.setHex(val);
+                if (modelParts.rubber) modelParts.rubber.forEach((mesh) => mesh.material.color.setHex(val));
+            });
+            rubberFolder.addColor(rubberColorObj, 'emissive').name('自发光颜色').onChange((val) => {
+                rubber.emissive.setHex(val);
+                if (modelParts.rubber) modelParts.rubber.forEach((mesh) => mesh.material.emissive.setHex(val));
+            });
+            rubberFolder.add(rubber, 'emissiveIntensity', 0, 2).name('自发光强度').onChange((val) => {
+                if (modelParts.rubber) modelParts.rubber.forEach((mesh) => { mesh.material.emissiveIntensity = val; });
+            });
+            rubberFolder.close();
+
             const powderFolder = matFolder.addFolder('生化粉末 (Powder)');
             powderFolder.add(whitePowder, 'roughness', 0, 1).name('粗糙度').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.roughness = val) });
             powderFolder.add(whitePowder, 'bumpScale', 0, 0.2).name('凹凸强度 (结块感)').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.bumpScale = val) });
@@ -940,27 +685,6 @@
             powderFolder.addColor(powderColorObj, 'color').name('粉末底色').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.color.setHex(val)) });
             powderFolder.addColor(powderColorObj, 'emissive').name('自发光颜色').onChange(val => { if(modelParts && modelParts.powder) modelParts.powder.forEach(mesh => mesh.material.emissive.setHex(val)) });
             powderFolder.close();
-            */
-
-            // 7. 加载模型（xilingping999 使用 Draco 网格压缩时需 DRACOLoader）
-            const loadingOverlay = document.getElementById('loading');
-            const loadingFillEl = document.getElementById('loading-bar-fill');
-            function setModelLoadingProgress(pct) {
-                const v = Math.max(0, Math.min(100, pct));
-                if (loadingFillEl) loadingFillEl.style.width = v + '%';
-                if (loadingOverlay) loadingOverlay.setAttribute('aria-valuenow', String(Math.round(v)));
-            }
-            function onModelLoadProgress(e) {
-                const loaded = e.loaded != null ? e.loaded : 0;
-                const total = e.total != null ? e.total : 0;
-                if (total > 0) {
-                    setModelLoadingProgress((100 * loaded) / total);
-                } else if (loaded > 0) {
-                    const approx = Math.min(85, 10 + 75 * (1 - 1 / (1 + loaded / (1.5 * 1024 * 1024))));
-                    setModelLoadingProgress(approx);
-                }
-            }
-            setModelLoadingProgress(0);
 
             const dracoLoader = new DRACOLoader();
             dracoLoader.setDecoderPath(DRACO_DECODER_BASE);
@@ -971,19 +695,16 @@
                 const model = gltf.scene;
                 window._heroBottleRoot = model;
                 
-                // 居中和缩放模型以完美适配视图
                 const box = new THREE.Box3().setFromObject(model);
                 const size = box.getSize(new THREE.Vector3());
                 const maxDim = Math.max(size.x, size.y, size.z);
                 
-                // 根据屏幕宽度调整模型大小（断点 390 / 810）
                 const w = window.innerWidth;
                 const targetDim = w <= 390 ? 1.8 : w <= 810 ? 2.6 : 3.2;
-                const scale = targetDim / maxDim; // 调整最佳视觉缩放比例
+                const scale = targetDim / maxDim; 
                 
                 model.scale.setScalar(scale);
 
-                // 把包围盒几何中心移到 model 局部原点，再挂到父级 Group：旋转即绕模型正中
                 const boxScaled = new THREE.Box3().setFromObject(model);
                 const geoCenter = boxScaled.getCenter(new THREE.Vector3());
                 model.position.sub(geoCenter);
@@ -991,18 +712,15 @@
                 const modelPivot = new THREE.Group();
                 modelPivot.add(model);
 
-                /** 入场结束后的默认姿态：绕世界 Z 轴向屏右倾斜 45°（相机在 +Z 看向原点时，负 Z 旋转使瓶身上部倒向 +X）；瓶身自转由 GLB 根节点 rotation.y 驱动 */
                 const MODEL_REST_ROT_X = 0;
                 const MODEL_REST_ROT_Y = 0;
                 const MODEL_REST_ROT_Z = THREE.MathUtils.degToRad(-45);
 
-                /** 默认机位、入场全程与 zoom 起点共用：先拉远，入场与运动模糊在远景下播放，结束后再 dolly 回默认 */
                 const cameraDefaultRest = new THREE.Vector3(0, 0, 8);
                 const POST_ENTRANCE_ZOOM_FROM_FACTOR = 1.58;
-                const POST_ENTRANCE_ZOOM_DUR = 3;
-                const entranceDur = 1.5;
-                /** dolly zoom 较瓶身入场结束时刻提前启动的秒数（与入场时间轴并行） */
-                const ZOOM_LEAD = 1;
+                const POST_ENTRANCE_ZOOM_DUR = 6.0; // zoom in 缩放时间延长
+                const entranceDur = 4.0; // 整体入场平移和旋转时间延长
+                const ZOOM_LEAD = 2.0; // 缩放提前开始的时间
                 const camOrigin = new THREE.Vector3(0, 0, 0);
                 const camViewDir = cameraDefaultRest.clone().sub(camOrigin).normalize();
                 const cameraFarIntro = camOrigin.clone().add(
@@ -1010,28 +728,22 @@
                         cameraDefaultRest.distanceTo(camOrigin) * POST_ENTRANCE_ZOOM_FROM_FACTOR
                     )
                 );
-                // 始终把相机固定在默认距离，方便用户随时可以旋转交互！
-                // 将拉远的视觉效果改为通过 modelPivot 缩放（scale）实现
+                
                 camera.position.copy(cameraDefaultRest);
                 camera.lookAt(0, 0, 0);
                 controls.update();
 
-                // 将屏幕水平像素偏移换算为近似世界坐标 X
-                // 注意：由于现在相机一直固定在默认距离 cameraDefaultRest，
-                // 模型在 z=0 平面的视锥体宽度应该根据真实的相机位置计算，才能确保刚好在屏幕边缘！
                 const camDist = camera.position.length();
                 const frustumH = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5) * camDist;
                 const frustumW = frustumH * camera.aspect;
                 const pxToWorldX = (px) => (px / container.clientWidth) * frustumW;
 
-                // 阴影平面：按入场终态（含向右 45° 倾角）取模型最低点，避免倾斜后“悬空”阴影
                 modelPivot.position.set(0, 0, 0);
                 modelPivot.rotation.set(MODEL_REST_ROT_X, MODEL_REST_ROT_Y, MODEL_REST_ROT_Z);
                 modelPivot.updateMatrixWorld(true);
                 const restBox = new THREE.Box3().setFromObject(modelPivot);
                 const shadowGroundY = restBox.min.y - 0.02;
 
-                // 起始 X：保证整瓶在画面左侧外（视锥半宽 + 物体最远点半径 + 裕量），避免固定 600px 在部分屏宽下仍露边
                 const restSize = restBox.getSize(new THREE.Vector3());
                 const maxExtentFromCenter =
                     0.5 * Math.sqrt(
@@ -1041,18 +753,16 @@
                     );
                 const edgePadPx = window.innerWidth <= 390 ? 72 : window.innerWidth <= 810 ? 120 : 160;
                 const edgePadding = pxToWorldX(edgePadPx);
-                const startX = -(frustumW * 0.5 + maxExtentFromCenter + edgePadding);
+                const startX = 0; // 取消从左侧飞入，保持在屏幕正中心
 
-                // 入场前：父级平移 + 旋转（度 → 弧度），终态 pivot 为「原位 + 向右倾 45°」；子级 model 不再承担入场旋转
                 modelPivot.position.set(startX, 0, 0);
                 modelPivot.rotation.set(
-                    THREE.MathUtils.degToRad(180),
-                    THREE.MathUtils.degToRad(-80),
-                    THREE.MathUtils.degToRad(154)
+                    THREE.MathUtils.degToRad(56),
+                    THREE.MathUtils.degToRad(-157),
+                    THREE.MathUtils.degToRad(104)
                 );
                 model.rotation.set(0, 0, 0);
 
-                // 动态生成基于 Object 坐标系的圆柱投影 UV (用于修复拉丝方向不一致的问题)
                 function generateCylindricalUV2(geometry) {
                     if (!geometry.attributes.position) return;
                     const pos = geometry.attributes.position;
@@ -1069,30 +779,27 @@
                         const y = pos.getY(i);
                         const z = pos.getZ(i);
                         
-                        // 圆柱投影：水平绕 Y 轴的角度作为 U，Y 轴高度作为 V
-                        const theta = Math.atan2(z, x); // -PI to PI
-                        let u = (theta + Math.PI) / (2 * Math.PI); // 0 to 1
-                        let v = (y - min.y) / height; // 0 to 1
+                        const theta = Math.atan2(z, x); 
+                        let u = (theta + Math.PI) / (2 * Math.PI); 
+                        let v = (y - min.y) / height; 
                         
                         uv2[i * 2] = u;
                         uv2[i * 2 + 1] = v;
                     }
                     
-                    // 【重要修复】：在 Three.js 最新版本中，texture.channel = 1 对应的是 'uv1' 属性，而不是以前老版本里的 'uv2'。
                     geometry.setAttribute('uv1', new THREE.BufferAttribute(uv2, 2));
                 }
 
                 function setupLabelMeshMaterial(child) {
-                    // 为标签网格动态生成第二套基于 Object 坐标系的 UV
                     generateCylindricalUV2(child.geometry);
 
                     if (!child.material) return;
                     const brushedForLabel = brushedTex.clone();
-                    brushedForLabel.channel = 1; // 关键魔法：强制让这张贴图使用刚才基于 Object 生成的 uv1
+                    brushedForLabel.channel = 1; 
                     brushedForLabel.needsUpdate = true;
                     
                     const noiseForLabel = noiseTex.clone();
-                    noiseForLabel.channel = 1; // 关键魔法：强制让这张贴图使用刚才基于 Object 生成的 uv1
+                    noiseForLabel.channel = 1; 
                     noiseForLabel.needsUpdate = true;
                     noiseForLabel.repeat.set(2, 2);
                     
@@ -1113,7 +820,6 @@
                     child.material = newMat;
                 }
 
-            // 遍历并精确替换材质
             model.traverse((child) => {
                 if (child.isMesh) {
                     child.castShadow = true;
@@ -1121,33 +827,25 @@
 
                     const name = child.name;
                     
-                    // 精确匹配网格名称
                     if (name.includes('jingshugaizi')) {
-                        // 金属盖子 -> 哑光拉丝银
                         child.material = brushedMetal;
                         modelParts.cap.push(child);
                     } else if (name.includes('pingsheng1')) {
-                        // 瓶身 -> 高透厚玻璃
-                        // 【修复关键点】：克隆玻璃材质，断开不同部件之间材质共享的引用绑定，这样调整瓶身颜色就不会污染其他原本可能默认共享同一材质的部件
                         child.material = clearGlass.clone();
-                        // 如果克隆后需要在 UI 里动态更新，我们需要确保 UI 控制的是这个网格身上的材质
                         modelParts.glass.push(child);
                     } else if (name.includes('xiangjiaosai')) {
-                        // 橡胶塞 -> 橡胶质感
                         child.material = rubber;
                         modelParts.rubber.push(child);
                     } else if (name.includes('polySurface2')) {
-                        // 内部结构 -> 白色粉末
-                        // 【修复关键点】：克隆白粉材质，避免与玻璃可能共享同一个默认材质（比如都是从glb导出的默认白色），从而解决一调玻璃粉末也跟着变颜色的问题
                         child.material = whitePowder.clone();
                         modelParts.powder.push(child);
                     } else if (name.includes('biaoqian1_2')) {
-                            // 外部标签 ②（须先于 biaoqian 判断，否则会被误归入 label1）
                             setupLabelMeshMaterial(child);
+                            child.material.roughness = 0.342;
+                            child.material.bumpScale = 0.85;
                             modelParts.label2.push(child);
                             modelParts.label.push(child);
                         } else if (name.includes('biaoqian')) {
-                            // 外部标签 ①
                             setupLabelMeshMaterial(child);
                             modelParts.label1.push(child);
                             modelParts.label.push(child);
@@ -1155,8 +853,9 @@
                     }
                 });
 
-                // 外部标签 / 部件显示 GUI — 已关闭，恢复时取消 GUI_RESTORE_BLOCK_C 注释
-                /* GUI_RESTORE_BLOCK_C 标签与部件显示（须与 BLOCK_A、BLOCK_B 同时恢复）
+                // ==========================================
+                // 标签与部件显示控制
+                // ==========================================
                 function addExternalLabelGui(meshList, folderTitle) {
                     if (!meshList.length) return;
                     function forMat(fn) {
@@ -1184,7 +883,7 @@
 
                     labelFolder.add(lm0, 'roughness', 0, 1).name('粗糙度').onChange((v) => forMat((m) => { m.roughness = v; }));
                     labelFolder.add(lm0, 'metalness', 0, 1).name('金属度').onChange((v) => forMat((m) => { m.metalness = v; }));
-                    labelFolder.add(lm0, 'bumpScale', 0, 0.02).name('拉丝凹凸强度').onChange((v) => forMat((m) => { m.bumpScale = v; }));
+                    labelFolder.add(lm0, 'bumpScale', 0, 1).name('拉丝凹凸强度').onChange((v) => forMat((m) => { m.bumpScale = v; }));
                     labelFolder.add(lm0, 'envMapIntensity', 0, 5).name('环境反射强度').onChange((v) => forMat((m) => { m.envMapIntensity = v; }));
                     labelFolder.add(lm0, 'clearcoat', 0, 1).name('清漆').onChange((v) => forMat((m) => { m.clearcoat = v; }));
                     labelFolder.add(lm0, 'clearcoatRoughness', 0, 1).name('清漆粗糙度').onChange((v) => forMat((m) => { m.clearcoatRoughness = v; }));
@@ -1280,9 +979,7 @@
                 addExternalLabelGui(modelParts.label1, '外部标签 ① (biaoqian1)');
                 addExternalLabelGui(modelParts.label2, '外部标签 ② (biaoqian1_2)');
 
-                // ==========================================
                 // 部件显示控制 UI (Parts Visibility)
-                // ==========================================
                 const visFolder = gui.addFolder('部件显示控制 (Visibility)');
                 const visSettings = {
                     showCap: true,
@@ -1311,9 +1008,7 @@
                 visFolder.add(visSettings, 'showLabel2').name('外部标签 ② (biaoqian1_2)').onChange((val) => {
                     modelParts.label2.forEach(mesh => mesh.visible = val);
                 });
-                */
 
-                // 添加一个底部极简阴影捕捉平面，增强落地感和质感
                 const planeGeometry = new THREE.PlaneGeometry(20, 20);
                 const shadowMaterial = new THREE.ShadowMaterial({ opacity: 0.05 });
                 const shadowPlane = new THREE.Mesh(planeGeometry, shadowMaterial);
@@ -1325,125 +1020,91 @@
                 scene.add(modelPivot);
 
                 // -------------------------------------------------------------
-                // 使用虚拟滚动 (Virtual Scroll) 驱动动画，专为 iframe/Framer Embed 优化
-                // 不依赖实际的 CSS scrollbar，避免了 iframe 内部出现不协调的滚动条
+                // 自动播放入场动画
                 // -------------------------------------------------------------
 
-                // 控制权从一开始就是开启的，你可以随时随地任意角度拖拽模型！
                 controls.enabled = true;
                 if (window._autoRotateSettings) window._autoRotateSettings.enabled = false;
 
-                // 初始化状态
-                const initialScale = 1 / POST_ENTRANCE_ZOOM_FROM_FACTOR;
+                const initialScale = 0; // 入场前从完全不可见（0）放大到 1
                 modelPivot.scale.setScalar(initialScale);
 
-                // 将相机始终放在默认距离
                 camera.position.copy(cameraDefaultRest);
                 camera.lookAt(0, 0, 0);
                 controls.update();
 
-                // 创建入场动画 Timeline（初始暂停，由鼠标/触控驱动）
-                const entranceTl = gsap.timeline({ paused: true });
+                const entranceTl = gsap.timeline({ 
+                    paused: false
+                });
+                window._entranceTl = entranceTl;
 
-                // 模型从远处飞入中央并旋转到默认姿态
+                const unifiedDur = 3.0; // 统一的入场动画持续时间 (加快一倍到 3 秒)
+
                 entranceTl.to(modelPivot.position, {
                     x: 0,
                     y: 0,
                     z: 0,
-                    duration: entranceDur,
-                    ease: 'power3.out'
+                    duration: unifiedDur,
+                    ease: 'power2.inOut'
                 }, 0);
 
                 entranceTl.to(modelPivot.rotation, {
                     x: MODEL_REST_ROT_X,
                     y: MODEL_REST_ROT_Y,
                     z: MODEL_REST_ROT_Z,
-                    duration: entranceDur,
-                    ease: 'power3.out'
+                    duration: unifiedDur,
+                    ease: 'power2.inOut'
                 }, 0);
 
-                // 模型放大 (模拟相机推进 zoom-in)
-                const zoomT0 = Math.max(0, entranceDur - ZOOM_LEAD);
                 entranceTl.to(modelPivot.scale, {
                     x: 1.0,
                     y: 1.0,
                     z: 1.0,
-                    duration: POST_ENTRANCE_ZOOM_DUR,
-                    ease: 'none'
-                }, zoomT0);
-
-                // 将 ABOUT US 文本块关联到虚拟滚动时间轴中
-                // 使整体向上滚动其内容高度加上视口高度的一半，达到类似整页内容滚出视口的视觉效果
-                const totalDur = Math.max(entranceDur, zoomT0 + POST_ENTRANCE_ZOOM_DUR);
-                entranceTl.to('.about-section', {
-                    y: () => - (document.querySelector('.about-section').offsetHeight),
-                    duration: totalDur,
-                    ease: 'none'
+                    duration: unifiedDur,
+                    ease: 'power2.inOut'
                 }, 0);
 
-                // === 虚拟滚动事件拦截逻辑 ===
-                let scrollProgress = 0;
-                // 调整这两个参数可以改变滑动的“阻力”感觉，越小越需要滑动更多次才能看完动画
-                const scrollSensitivity = 0.0006; 
-                const touchSensitivity = 0.0005;
+                // “扫光”效果：在入场动画快要结束时（提前 1 秒）开始扫光
+                const sweepDur = 1.2;
+                const sweepStart = Math.max(0, unifiedDur - 1.0);
+                
+                // 扫光的位移：从左边 (-10) 移动到右边 (10)
+                entranceTl.to(sweepLight.position, {
+                    x: 10,
+                    duration: sweepDur,
+                    ease: 'power1.inOut'
+                }, sweepStart);
+                
+                // 扫光的亮度：快速亮起 然后渐暗 (回 0)
+                entranceTl.to(sweepLight, {
+                    intensity: 5.0,
+                    duration: sweepDur * 0.4,
+                    ease: 'power1.out'
+                }, sweepStart);
+                
+                entranceTl.to(sweepLight, {
+                    intensity: 0,
+                    duration: sweepDur * 0.6,
+                    ease: 'power1.in'
+                }, sweepStart + sweepDur * 0.4);
 
-                function updateTimelineProgress(newProgress) {
-                    scrollProgress = Math.max(0, Math.min(1, newProgress));
-                    window._scrollProgress = scrollProgress;
-                    window._updateTouchAction();
-                    
-                    // 动态控制自转：进度大于 0.4 时开启自转
+                // 在缩放、旋转复位以及“扫光”都结束后，等待 1 秒，然后再开启自转
+                entranceTl.call(function() {
                     if (window._autoRotateSettings) {
-                        window._autoRotateSettings.enabled = (scrollProgress > 0.4);
+                        window._autoRotateSettings.enabled = true;
                     }
-                    
-                    // 利用 gsap 实现平滑的“跟随”感 (类似 scrub 效果)
-                    gsap.to(entranceTl, {
-                        progress: scrollProgress,
-                        duration: 0.8,
-                        ease: 'power2.out',
-                        overwrite: true // 极其关键：迅速滑屏时，确保打断旧的 progress tween，防止动画打架卡死
-                    });
-                }
+                }, null, "+=1.0");
 
-                // 赋值给全局拦截器
-                window._handleVirtualScroll = (e, deltaY, type) => {
-                    const sensitivity = type === 'wheel' ? scrollSensitivity : touchSensitivity;
-                    const predictedProgress = scrollProgress + deltaY * sensitivity;
-
-                    if ((deltaY > 0 && scrollProgress < 1) || (deltaY < 0 && scrollProgress > 0)) {
-                        e.preventDefault();
-                        updateTimelineProgress(predictedProgress);
-                        
-                        // 如果这一划直接把进度推满（或推到0）了，返回 locked 状态给上层，
-                        // 强制开启“本轮手势吸附锁”，防止外层页面瞬间滑走
-                        if (type === 'touch' && (predictedProgress >= 1 || predictedProgress <= 0)) {
-                            return 'locked';
-                        }
-                        return 'handled';
-                    }
-                    return 'passed';
-                };
-
-                // 标记加载完成，放开对加载期的硬拦截，交由 window._handleVirtualScroll 接管进度逻辑
-                window._isModelLoaded = true;
-                window._updateTouchAction();
-                // ==============================================================
-
-                // HDRI 上下旋转动画：营造光线在模型上扫过的质感
-                // 从 -Math.PI 到 Math.PI (360度完整旋转)，首尾相接，持续匀速循环扫描
                 scene.environmentRotation.x = -Math.PI;
                 gsap.to(scene.environmentRotation, {
                     x: Math.PI,
-                    duration: 16.0, // 扫完一整圈的时长，放慢显得更有质感
-                    ease: "none", // 必须改为匀速 (none/linear)，这样循环重新开始时速度才不会有卡顿感
-                    repeat: -1, // 无限循环
-                    yoyo: false, // 取消钟摆式的来回，只朝一个方向转，转满一圈后自动跳回 -Math.PI 继续
+                    duration: 16.0, 
+                    ease: "none", 
+                    repeat: -1, 
+                    yoyo: false, 
                     onUpdate: () => {
-                        // 同步更新UI
                         if (envSettings && gui) {
                             envSettings.rotationX = scene.environmentRotation.x;
-                            // 让 UI 控件显示也跟着动
                             const controllers = gui.controllersRecursive();
                             controllers.forEach(c => {
                                 if (c.property === 'rotationX') c.updateDisplay();
@@ -1451,21 +1112,14 @@
                         }
                     }
                 });
-                
-                setModelLoadingProgress(100);
-                if (loadingOverlay) {
-                    loadingOverlay.classList.add('is-hidden');
-                    setTimeout(() => {
-                        loadingOverlay.style.display = 'none';
-                    }, 500);
-                }
 
-            }, onModelLoadProgress, function (error) {
+            }, undefined, function (error) {
                 console.error(error);
                 dracoLoader.dispose();
-                const cap = document.getElementById('loading-caption');
-                if (cap) cap.textContent = 'Load failed';
-                if (loadingFillEl) loadingFillEl.style.background = '#8a5a5a';
+                const errDiv = document.createElement('div');
+                errDiv.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:white;font-family:sans-serif;text-align:center;';
+                errDiv.innerHTML = '<h2>加载模型失败</h2><p>如果您是直接双击打开的 HTML 文件，<br>浏览器安全策略(CORS)会阻止加载本地 GLB 模型。<br>请使用 VS Code 的 Live Server 插件打开，或者部署到 Vercel 后查看。</p>';
+                document.body.appendChild(errDiv);
             });
 
             window.addEventListener('resize', onWindowResize);
@@ -1480,10 +1134,8 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            // 控制器更新，包括阻尼
             controls.update();
 
-            // 瓶身自转：绕 GLB 根节点局部 Y 轴旋转（相机不动）；enabled 在 dolly zoom 的 onStart 与整段入场结束时的 controls 同步打开
             const bottle = window._heroBottleRoot;
             if (
                 bottle &&
